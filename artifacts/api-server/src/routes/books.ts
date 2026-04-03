@@ -1,29 +1,25 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { books, bookChapters, bookSections } from "@workspace/db";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { parseBookSlug, importOpenStaxBook } from "../lib/openstaxFetcher";
 
 const booksRouter = Router();
 
 booksRouter.get("/books", async (req, res) => {
   try {
-    const allBooks = await db
-      .select({
-        id: books.id,
-        slug: books.slug,
-        title: books.title,
-        coverUrl: books.coverUrl,
-        status: books.status,
-        totalSections: books.totalSections,
-        importedSections: books.importedSections,
-        errorMessage: books.errorMessage,
-        createdAt: books.createdAt,
-      })
-      .from(books)
-      .orderBy(asc(books.title));
+    const rows = await db.execute(sql`
+      SELECT b.id, b.slug, b.title, b.cover_url as "coverUrl",
+             b.status, b.total_sections as "totalSections",
+             b.imported_sections as "importedSections",
+             b.error_message as "errorMessage",
+             b.created_at as "createdAt",
+             (SELECT count(*)::int FROM book_chapters c WHERE c.book_id = b.id) as "chapterCount"
+      FROM books b
+      ORDER BY b.title ASC
+    `);
 
-    res.json(allBooks);
+    res.json(rows.rows);
   } catch (err) {
     req.log?.error({ err }, "Failed to list books");
     res.status(500).json({ error: "Failed to fetch book list." });
@@ -71,6 +67,8 @@ booksRouter.post("/books/import", async (req, res) => {
       signal: AbortSignal.timeout(15000),
     });
 
+    let matchedTitle: string | undefined;
+    let matchedCoverUrl: string | undefined;
     if (cmsRes.ok) {
       const cmsData = (await cmsRes.json()) as { books?: Array<{ slug: string; title: string; cover_url?: string }> };
       const match = cmsData.books?.find((b) => b.slug === `books/${slug}` || b.slug === slug);
@@ -78,13 +76,16 @@ booksRouter.post("/books/import", async (req, res) => {
         res.status(404).json({ error: `Could not find a book with slug "${slug}" on OpenStax.` });
         return;
       }
+      matchedTitle = match.title;
+      matchedCoverUrl = match.cover_url;
     }
 
     const [newBook] = await db
       .insert(books)
       .values({
         slug,
-        title: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        title: matchedTitle || slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        coverUrl: matchedCoverUrl || null,
         status: "importing",
       })
       .returning();
