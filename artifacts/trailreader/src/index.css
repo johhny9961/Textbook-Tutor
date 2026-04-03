@@ -1274,6 +1274,29 @@
   display: none;
 }
 
+.upload-html-fallback {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid hsl(240 18% 22%);
+  border-radius: 8px;
+  color: hsl(240 14% 55%);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.upload-html-fallback:hover {
+  color: hsl(240 14% 75%);
+  border-color: hsl(240 18% 30%);
+}
+.upload-html-fallback:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .upload-processing {
   display: flex;
   flex-direction: column;

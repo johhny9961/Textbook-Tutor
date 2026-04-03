@@ -46,7 +46,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
   - `ReaderView.tsx` — renders section HTML; applies `.tts-active` class to active paragraph
   - `TTSControls.tsx` — play/pause/stop/speed; progress indicator
   - `TutorChat.tsx` — slide-up chat panel with SSE streaming from `/api/chat`
-  - `UploadPage.tsx` — drag-and-drop or file-picker for `.html` files
+  - `UploadPage.tsx` — PDF primary upload (→ server-side parsing), HTML secondary fallback (client-side)
   - `SettingsPage.tsx` — TTS speed, OAT Engine URL settings
 
 **localStorage keys**:
@@ -59,8 +59,12 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 ### API Server (`artifacts/api-server`)
 - **Purpose**: Backend API serving the TrailReader (and future apps)
-- **Routes**: `POST /api/chat` — Claude claude-haiku-4-5 SSE streaming with Trail Guide system prompt
+- **Routes**:
+  - `POST /api/chat` — Claude claude-haiku-4-5 SSE streaming with Trail Guide system prompt
+  - `POST /api/parse-pdf` — Server-side PDF text extraction via pdfjs-dist (legacy build); multipart upload with multer; returns `BookData` JSON with section-local sentence indices
 - **Trail Guide persona**: Socratic, ADHD-aware, 5-phase learning approach for OAT prep
+- **Dependencies**: pdfjs-dist (externalized in esbuild), multer for file uploads
+- **Error handling**: Centralized middleware catches MulterError (file size, type) → JSON responses
 
 ### Mockup Sandbox (`artifacts/mockup-sandbox`)
 - **Purpose**: Vite dev server for isolated component preview on the canvas board

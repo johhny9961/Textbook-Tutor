@@ -1,20 +1,57 @@
 import { useState, useRef, useCallback } from "react";
-import { Upload, BookOpen, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, BookOpen, AlertCircle, Loader2, FileText } from "lucide-react";
 import { parseOpenStaxHTML } from "@/utils/htmlParser";
 import { useApp } from "@/context/AppContext";
+import type { BookData } from "@/types";
 
 export function UploadPage() {
   const { setBook } = useApp();
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const htmlInputRef = useRef<HTMLInputElement>(null);
 
-  const processFile = useCallback(async (file: File) => {
-    if (!file.name.endsWith(".html") && !file.name.endsWith(".htm")) {
-      setError("Please upload an HTML file (OpenStax textbooks downloaded as .html)");
+  const processPdf = useCallback(async (file: File) => {
+    if (file.size > 100 * 1024 * 1024) {
+      setError("File is too large (max 100 MB). Try uploading individual chapters.");
       return;
     }
+
+    setError(null);
+    setIsProcessing(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${import.meta.env.BASE_URL}api/parse-pdf`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error || "Failed to parse PDF. Please try a different file.");
+        return;
+      }
+
+      const book: BookData = await res.json();
+
+      if (book.sections.length === 0) {
+        setError("No readable content found in this PDF.");
+        return;
+      }
+
+      setBook(book);
+    } catch {
+      setError("Could not connect to the server. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [setBook]);
+
+  const processHtml = useCallback(async (file: File) => {
     if (file.size > 50 * 1024 * 1024) {
       setError("File is too large (max 50 MB). Try uploading individual chapters.");
       return;
@@ -33,12 +70,23 @@ export function UploadPage() {
       }
 
       setBook(book);
-    } catch (err) {
+    } catch {
       setError("Something went wrong reading the file. Try a different file.");
     } finally {
       setIsProcessing(false);
     }
   }, [setBook]);
+
+  const processFile = useCallback(async (file: File) => {
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".pdf")) {
+      processPdf(file);
+    } else if (name.endsWith(".html") || name.endsWith(".htm")) {
+      processHtml(file);
+    } else {
+      setError("Please upload a PDF or HTML file.");
+    }
+  }, [processPdf, processHtml]);
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -58,10 +106,6 @@ export function UploadPage() {
 
   const handleDragLeave = () => setIsDragging(false);
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFiles(e.target.files);
-  };
-
   return (
     <div className="upload-page">
       <div className="upload-content">
@@ -78,33 +122,52 @@ export function UploadPage() {
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onClick={() => !isProcessing && fileInputRef.current?.click()}
+          onClick={() => !isProcessing && pdfInputRef.current?.click()}
           role="button"
           tabIndex={0}
-          onKeyDown={e => e.key === "Enter" && !isProcessing && fileInputRef.current?.click()}
-          aria-label="Upload textbook HTML file"
+          onKeyDown={e => e.key === "Enter" && !isProcessing && pdfInputRef.current?.click()}
+          aria-label="Upload textbook PDF file"
         >
           {isProcessing ? (
             <div className="upload-processing">
               <Loader2 size={32} className="spin" />
               <p>Parsing your textbook…</p>
-              <p className="upload-processing-sub">This takes a few seconds for large files.</p>
+              <p className="upload-processing-sub">This may take a moment for large files.</p>
             </div>
           ) : (
             <>
               <Upload size={32} className="upload-icon" />
-              <p className="upload-drop-text">Drop your textbook here</p>
+              <p className="upload-drop-text">Drop your textbook PDF here</p>
               <p className="upload-drop-sub">or click to browse</p>
-              <span className="upload-file-type">.html or .htm</span>
+              <span className="upload-file-type">.pdf</span>
             </>
           )}
         </div>
 
         <input
-          ref={fileInputRef}
+          ref={pdfInputRef}
+          type="file"
+          accept=".pdf"
+          onChange={e => handleFiles(e.target.files)}
+          className="upload-file-input"
+          aria-hidden="true"
+        />
+
+        <button
+          type="button"
+          className="upload-html-fallback"
+          onClick={() => htmlInputRef.current?.click()}
+          disabled={isProcessing}
+        >
+          <FileText size={16} />
+          Or upload an HTML file instead
+        </button>
+
+        <input
+          ref={htmlInputRef}
           type="file"
           accept=".html,.htm"
-          onChange={handleFileInput}
+          onChange={e => handleFiles(e.target.files)}
           className="upload-file-input"
           aria-hidden="true"
         />
@@ -120,13 +183,11 @@ export function UploadPage() {
           <h2>How to get your textbook</h2>
           <ol>
             <li>Go to <strong>openstax.org</strong> and open your textbook</li>
-            <li>Navigate to the chapter you want to study</li>
-            <li>Use <strong>File → Save Page As…</strong> in your browser</li>
-            <li>Choose <strong>"Webpage, Complete"</strong> or <strong>"HTML Only"</strong></li>
-            <li>Upload the <code>.html</code> file here</li>
+            <li>Click <strong>"Get this book"</strong> and download the <strong>PDF</strong></li>
+            <li>Upload the <code>.pdf</code> file here</li>
           </ol>
           <p className="upload-privacy-note">
-            Your file stays on your device — nothing is uploaded to any server.
+            Your PDF is sent to our server for text extraction, then discarded immediately. Nothing is stored.
           </p>
         </div>
       </div>
