@@ -4,6 +4,9 @@ import { parseOpenStaxHTML } from "@/utils/htmlParser";
 import { useApp } from "@/context/AppContext";
 import type { BookData } from "@/types";
 
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const UPLOAD_TIMEOUT_MS = 120_000;
+
 export function UploadPage() {
   const { setBook } = useApp();
   const [isDragging, setIsDragging] = useState(false);
@@ -25,10 +28,19 @@ export function UploadPage() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(`${import.meta.env.BASE_URL}api/parse-pdf`, {
-        method: "POST",
-        body: formData,
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/api/parse-pdf`, {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -44,8 +56,12 @@ export function UploadPage() {
       }
 
       setBook(book);
-    } catch {
-      setError("Could not connect to the server. Please try again.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Upload timed out. The file may be too large — try a smaller PDF or individual chapters.");
+      } else {
+        setError("Could not connect to the server. Please try again.");
+      }
     } finally {
       setIsProcessing(false);
     }
