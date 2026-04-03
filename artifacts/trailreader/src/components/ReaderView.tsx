@@ -20,8 +20,8 @@ interface ReaderViewProps {
 export function ReaderView({ section, activeSentIdx, isPlaying }: ReaderViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const prevSectionIdRef = useRef<string>("");
-  const prevHighlightRef = useRef<Element | null>(null);
 
   const saveScroll = useCallback(
     debounce((sectionId: string, scrollTop: number) => {
@@ -51,28 +51,28 @@ export function ReaderView({ section, activeSentIdx, isPlaying }: ReaderViewProp
         container.scrollTo({ top, behavior: "instant" });
       }
       prevSectionIdRef.current = section.id;
-      if (prevHighlightRef.current) {
-        prevHighlightRef.current.classList.remove("tts-active");
-        prevHighlightRef.current = null;
-      }
     }
   }, [section.id]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (wrapper) {
+      wrapper.setAttribute("data-active-sent", isPlaying ? String(activeSentIdx) : "-1");
+    }
+  }, [activeSentIdx, isPlaying]);
 
   useEffect(() => {
     const content = contentRef.current;
     if (!content) return;
 
-    if (prevHighlightRef.current) {
-      prevHighlightRef.current.classList.remove("tts-active");
-      prevHighlightRef.current = null;
-    }
+    const prev = content.querySelector("[data-sent-idx].tts-active");
+    if (prev) prev.classList.remove("tts-active");
 
     if (!isPlaying) return;
 
     const el = content.querySelector(`[data-sent-idx="${activeSentIdx}"]`);
     if (el) {
       el.classList.add("tts-active");
-      prevHighlightRef.current = el;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [activeSentIdx, isPlaying, section.id]);
@@ -85,12 +85,12 @@ export function ReaderView({ section, activeSentIdx, isPlaying }: ReaderViewProp
           <h1 className="reader-section-title">{section.title}</h1>
         </header>
 
-        <div
-          ref={contentRef}
-          className="reader-content prose-openstax"
-          data-active-sent={isPlaying ? activeSentIdx : -1}
-          dangerouslySetInnerHTML={{ __html: section.htmlContent }}
-        />
+        <div ref={wrapperRef} className="reader-content prose-openstax" data-active-sent="-1">
+          <div
+            ref={contentRef}
+            dangerouslySetInnerHTML={{ __html: section.htmlContent }}
+          />
+        </div>
       </article>
     </div>
   );

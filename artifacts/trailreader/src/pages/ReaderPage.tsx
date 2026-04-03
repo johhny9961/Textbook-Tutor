@@ -79,7 +79,7 @@ export function ReaderPage() {
         isPaused={isPaused}
         sentIdx={sentIdx}
         totalSents={currentSection.sentences.length}
-        onPlay={play}
+        onPlay={() => play()}
         onPause={pause}
         onResume={resume}
         onStop={stop}
