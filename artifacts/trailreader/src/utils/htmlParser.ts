@@ -1,42 +1,71 @@
 import DOMPurify from "dompurify";
-import type { BookData, BookChapter, BookSection } from "@/types";
+import type { BookData, BookChapter, BookSection, Sentence } from "@/types";
 
 const BLOCK_TAGS = new Set([
   "P", "LI", "DD", "DT", "BLOCKQUOTE", "PRE", "H1", "H2", "H3", "H4", "H5", "H6",
   "FIGCAPTION", "CAPTION", "TD", "TH",
 ]);
 
-function extractParagraphs(el: Element): string[] {
-  const paras: string[] = [];
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function tokenizeSentences(text: string): string[] {
+  if (!text.trim()) return [];
+  const parts = text.trim().split(/(?<=[.!?])\s+(?=[A-Z"'])/);
+  return parts.map(s => s.trim()).filter(s => s.length > 0);
+}
+
+interface InstrumentResult {
+  htmlContent: string;
+  paragraphs: string[];
+  sentences: Sentence[];
+}
+
+function instrumentHTML(el: Element): InstrumentResult {
+  let paraIdx = 0;
+  let sentIdx = 0;
+  const paragraphs: string[] = [];
+  const sentences: Sentence[] = [];
+
   function walk(node: Element) {
     if (BLOCK_TAGS.has(node.tagName)) {
-      const text = node.textContent?.trim().replace(/\s+/g, " ") || "";
-      if (text.length > 20) paras.push(text);
+      const text = (node.textContent?.trim() || "").replace(/\s+/g, " ");
+      if (text.length <= 20) return;
+
+      const currentParaIdx = paraIdx++;
+      node.setAttribute("data-para-idx", String(currentParaIdx));
+      paragraphs.push(text);
+
+      const hasHtmlMarkup = node.innerHTML !== (node.textContent ?? "");
+      const sentTexts = tokenizeSentences(text);
+
+      if (!hasHtmlMarkup && sentTexts.length > 1) {
+        const spans = sentTexts.map(s => {
+          const idx = sentIdx++;
+          sentences.push({ text: s, paraIdx: currentParaIdx, sentIdx: idx });
+          return `<span data-sent-idx="${idx}">${escapeHtml(s)}</span>`;
+        });
+        node.innerHTML = spans.join(" ");
+      } else {
+        const idx = sentIdx++;
+        sentences.push({ text, paraIdx: currentParaIdx, sentIdx: idx });
+        node.innerHTML = `<span data-sent-idx="${idx}">${node.innerHTML}</span>`;
+      }
     } else {
       for (const child of Array.from(node.children)) {
         walk(child as Element);
       }
     }
   }
-  walk(el);
-  return paras;
-}
 
-function instrumentHTML(el: Element): string {
-  let idx = 0;
-  function walk(node: Element) {
-    if (BLOCK_TAGS.has(node.tagName)) {
-      const text = node.textContent?.trim().replace(/\s+/g, " ") || "";
-      if (text.length > 20) {
-        node.setAttribute("data-para-idx", String(idx++));
-      }
-    }
-    for (const child of Array.from(node.children)) {
-      walk(child as Element);
-    }
-  }
   walk(el);
-  return el.innerHTML;
+  return { htmlContent: el.innerHTML, paragraphs, sentences };
 }
 
 function cleanTitle(el: Element | null): string {
@@ -65,15 +94,24 @@ export function parseOpenStaxHTML(rawHtml: string, fileName: string): BookData {
   }
 
   if (sections.length === 0) {
+    const container = doc.createElement("div");
     const allText = doc.body?.textContent?.trim() || "";
+    const rawParas = allText.split(/\n\n+/).filter(t => t.trim().length > 20).slice(0, 500);
+    rawParas.forEach((t, i) => {
+      const p = doc.createElement("p");
+      p.textContent = t.trim();
+      container.appendChild(p);
+    });
+    const { htmlContent, paragraphs, sentences } = instrumentHTML(container);
     const fallbackSection: BookSection = {
       id: "s-0-0",
       chapterIndex: 0,
       chapterTitle: "Content",
       sectionIndex: 0,
       title: "Full Document",
-      htmlContent: doc.body?.innerHTML || rawHtml,
-      paragraphs: allText.split(/\n\n+/).filter(t => t.trim().length > 0).slice(0, 500),
+      htmlContent,
+      paragraphs,
+      sentences,
     };
     sections.push(fallbackSection);
     chapters.push({ index: 0, title: "Content", sections: [fallbackSection] });
@@ -99,9 +137,6 @@ function parseWithHeadings(
   let currentChapterTitle = "Introduction";
   let currentChapterSections: BookSection[] = [];
 
-  const allNodes = Array.from(body.querySelectorAll("*"));
-  const headingSet = new Set<Element>();
-
   const h1s = body.querySelectorAll("h1, [data-type='chapter-title'], [data-type='title'][data-level='1']");
   const h2s = body.querySelectorAll("h2, [data-type='section-title'], [data-type='title'][data-level='2']");
   const h3s = body.querySelectorAll("h3, [data-type='subsection-title']");
@@ -111,7 +146,7 @@ function parseWithHeadings(
     return pos & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
   });
 
-  allHeadings.forEach(h => headingSet.add(h));
+  const headingSet = new Set<Element>(allHeadings);
 
   if (allHeadings.length === 0) {
     parseFlatContent(doc, sections, chapters, "Document");
@@ -125,8 +160,7 @@ function parseWithHeadings(
     chTitle: string,
     secI: number
   ) {
-    const paragraphs = extractParagraphs(contentEl);
-    const htmlContent = instrumentHTML(contentEl);
+    const { htmlContent, paragraphs, sentences } = instrumentHTML(contentEl);
     if (paragraphs.length === 0 && htmlContent.trim().length < 50) return;
 
     const section: BookSection = {
@@ -137,6 +171,7 @@ function parseWithHeadings(
       title: sectionTitle,
       htmlContent,
       paragraphs,
+      sentences,
     };
     sections.push(section);
     currentChapterSections.push(section);
@@ -216,28 +251,40 @@ function parseFlatContent(
   const chapterTitle = fileName;
   const chapterSections: BookSection[] = [];
 
-  const paras = extractParagraphs(body);
-  const CHUNK_SIZE = 30;
+  const allTexts: string[] = [];
+  function extractTexts(node: Element) {
+    if (BLOCK_TAGS.has(node.tagName)) {
+      const text = (node.textContent?.trim() || "").replace(/\s+/g, " ");
+      if (text.length > 20) allTexts.push(text);
+    } else {
+      for (const child of Array.from(node.children)) {
+        extractTexts(child as Element);
+      }
+    }
+  }
+  extractTexts(body);
 
-  for (let i = 0; i < Math.ceil(paras.length / CHUNK_SIZE); i++) {
-    const chunk = paras.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+  const CHUNK_SIZE = 30;
+  for (let i = 0; i < Math.ceil(allTexts.length / CHUNK_SIZE); i++) {
+    const chunk = allTexts.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
     const container = doc.createElement("div");
 
-    chunk.forEach((text, j) => {
+    chunk.forEach(text => {
       const p = doc.createElement("p");
       p.textContent = text;
-      p.setAttribute("data-para-idx", String(j));
       container.appendChild(p);
     });
 
+    const { htmlContent, paragraphs, sentences } = instrumentHTML(container);
     const section: BookSection = {
       id: `s-0-${i}`,
       chapterIndex: 0,
       chapterTitle,
       sectionIndex: i,
       title: `Part ${i + 1}`,
-      htmlContent: container.innerHTML,
-      paragraphs: chunk,
+      htmlContent,
+      paragraphs,
+      sentences,
     };
     sections.push(section);
     chapterSections.push(section);

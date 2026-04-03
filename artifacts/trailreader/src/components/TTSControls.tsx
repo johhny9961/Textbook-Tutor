@@ -4,8 +4,8 @@ import { useApp } from "@/context/AppContext";
 interface TTSControlsProps {
   isPlaying: boolean;
   isPaused: boolean;
-  paraIdx: number;
-  totalParas: number;
+  sentIdx: number;
+  totalSents: number;
   onPlay: () => void;
   onPause: () => void;
   onResume: () => void;
@@ -17,8 +17,8 @@ interface TTSControlsProps {
 export function TTSControls({
   isPlaying,
   isPaused,
-  paraIdx,
-  totalParas,
+  sentIdx,
+  totalSents,
   onPlay,
   onPause,
   onResume,
@@ -27,12 +27,7 @@ export function TTSControls({
   onSkipPrev,
 }: TTSControlsProps) {
   const { speed, setSpeed } = useApp();
-  const progress = totalParas > 0 ? ((paraIdx + 1) / totalParas) * 100 : 0;
-
-  const handleSpeedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSpeed(parseFloat(e.target.value));
-  };
-
+  const progress = totalSents > 0 ? ((sentIdx + 1) / totalSents) * 100 : 0;
   const speedLabel = speed === 1.0 ? "1×" : `${speed.toFixed(1)}×`;
 
   return (
@@ -46,8 +41,8 @@ export function TTSControls({
           <button
             className="tts-btn"
             onClick={onSkipPrev}
-            aria-label="Previous paragraph"
-            disabled={paraIdx === 0}
+            aria-label="Previous sentence"
+            disabled={sentIdx === 0}
           >
             <SkipBack size={18} />
           </button>
@@ -69,8 +64,8 @@ export function TTSControls({
           <button
             className="tts-btn"
             onClick={onSkipNext}
-            aria-label="Next paragraph"
-            disabled={paraIdx >= totalParas - 1}
+            aria-label="Next sentence"
+            disabled={sentIdx >= totalSents - 1}
           >
             <SkipForward size={18} />
           </button>
@@ -90,7 +85,7 @@ export function TTSControls({
             max={2.0}
             step={0.1}
             value={speed}
-            onChange={handleSpeedChange}
+            onChange={e => setSpeed(parseFloat(e.target.value))}
             className="tts-speed-slider"
             aria-label={`Playback speed: ${speedLabel}`}
           />
@@ -99,7 +94,7 @@ export function TTSControls({
       </div>
 
       <div className="tts-para-count">
-        {paraIdx + 1} / {totalParas}
+        {sentIdx + 1} / {totalSents} sentences
       </div>
     </div>
   );

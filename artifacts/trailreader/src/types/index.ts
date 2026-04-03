@@ -1,3 +1,9 @@
+export interface Sentence {
+  text: string;
+  paraIdx: number;
+  sentIdx: number;
+}
+
 export interface BookSection {
   id: string;
   chapterIndex: number;
@@ -6,6 +12,7 @@ export interface BookSection {
   title: string;
   htmlContent: string;
   paragraphs: string[];
+  sentences: Sentence[];
 }
 
 export interface BookChapter {
@@ -28,6 +35,6 @@ export interface ChatMessage {
 export interface TTSState {
   isPlaying: boolean;
   isPaused: boolean;
-  paraIndex: number;
+  sentIndex: number;
   speed: number;
 }

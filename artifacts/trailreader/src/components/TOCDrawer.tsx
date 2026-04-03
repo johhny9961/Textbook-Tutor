@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type KeyboardEvent, type RefObject } from "react";
 import { X, ChevronRight, ChevronDown, BookOpen } from "lucide-react";
 import type { BookData } from "@/types";
 
@@ -18,17 +18,20 @@ export function TOCDrawer({ isOpen, onClose, book, currentSectionIdx, onSectionS
     }
   );
 
-  const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  const asideRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onCloseRef.current();
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
+    if (isOpen) {
+      asideRef.current?.focus();
+    }
   }, [isOpen]);
+
+  const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      onClose();
+    }
+  };
 
   const toggleChapter = (chIdx: number) => {
     setExpandedChapters(prev => {
@@ -55,9 +58,15 @@ export function TOCDrawer({ isOpen, onClose, book, currentSectionIdx, onSectionS
         type="button"
       />
       <aside
+        ref={asideRef as RefObject<HTMLElement>}
         className={`toc-drawer ${isOpen ? "toc-drawer-open" : ""}`}
+        role="dialog"
         aria-label="Table of contents"
+        aria-modal={isOpen}
         aria-hidden={!isOpen}
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+        style={{ outline: "none" }}
       >
         <div className="toc-header">
           <div className="toc-header-title">

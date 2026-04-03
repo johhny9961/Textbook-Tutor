@@ -6,10 +6,11 @@ interface HeaderProps {
   onMenuClick: () => void;
   sectionTitle?: string;
   chapterTitle?: string;
+  sectionLabel?: string;
   progress?: number;
 }
 
-export function Header({ onMenuClick, sectionTitle, chapterTitle, progress = 0 }: HeaderProps) {
+export function Header({ onMenuClick, sectionTitle, chapterTitle, sectionLabel, progress = 0 }: HeaderProps) {
   const { oatEngineUrl } = useApp();
 
   return (
@@ -31,9 +32,14 @@ export function Header({ onMenuClick, sectionTitle, chapterTitle, progress = 0 }
             {chapterTitle && (
               <span className="header-chapter">{chapterTitle}</span>
             )}
-            {sectionTitle && (
-              <span className="header-section">{sectionTitle}</span>
-            )}
+            <div className="header-section-row">
+              {sectionTitle && (
+                <span className="header-section">{sectionTitle}</span>
+              )}
+              {sectionLabel && (
+                <span className="header-section-label">{sectionLabel}</span>
+              )}
+            </div>
             {!chapterTitle && !sectionTitle && (
               <span className="header-section">TrailReader</span>
             )}

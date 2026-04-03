@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { MessageSquare } from "lucide-react";
+import { BookOpen, MessageSquare, ExternalLink } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { Header } from "@/components/Header";
 import { TOCDrawer } from "@/components/TOCDrawer";
@@ -9,22 +9,28 @@ import { TutorChat } from "@/components/TutorChat";
 import { useTTS } from "@/hooks/useTTS";
 
 export function ReaderPage() {
-  const { book, sectionIdx, setSectionIdx, speed } = useApp();
+  const { book, sectionIdx, setSectionIdx, speed, oatEngineUrl } = useApp();
   const [tocOpen, setTocOpen] = useState(false);
   const [tutorOpen, setTutorOpen] = useState(false);
+  const [activeSentIdx, setActiveSentIdx] = useState(0);
   const [activeParaIdx, setActiveParaIdx] = useState(0);
 
   const currentSection = book?.sections[sectionIdx] ?? null;
+  const totalSections = book?.sections.length ?? 0;
 
-  const { isPlaying, isPaused, paraIdx, play, pause, resume, stop, skipNext, skipPrev } = useTTS({
-    paragraphs: currentSection?.paragraphs ?? [],
+  const { isPlaying, isPaused, sentIdx, play, pause, resume, stop, skipNext, skipPrev } = useTTS({
+    sentences: currentSection?.sentences ?? [],
     speed,
-    onParaChange: setActiveParaIdx,
+    onSentenceChange: (si, pi) => {
+      setActiveSentIdx(si);
+      setActiveParaIdx(pi);
+    },
     onEnd: () => {
       if (!book) return;
       const next = sectionIdx + 1;
       if (next < book.sections.length) {
         setSectionIdx(next);
+        setActiveSentIdx(0);
         setActiveParaIdx(0);
       }
     },
@@ -33,11 +39,12 @@ export function ReaderPage() {
   const handleSectionSelect = useCallback((idx: number) => {
     stop();
     setSectionIdx(idx);
+    setActiveSentIdx(0);
     setActiveParaIdx(0);
   }, [stop, setSectionIdx]);
 
-  const totalSections = book?.sections.length ?? 0;
   const sectionProgress = totalSections > 0 ? ((sectionIdx + 1) / totalSections) * 100 : 0;
+  const sectionLabel = `${sectionIdx + 1} / ${totalSections}`;
 
   if (!book || !currentSection) return null;
 
@@ -47,6 +54,7 @@ export function ReaderPage() {
         onMenuClick={() => setTocOpen(true)}
         chapterTitle={currentSection.chapterTitle}
         sectionTitle={currentSection.title}
+        sectionLabel={sectionLabel}
         progress={sectionProgress}
       />
 
@@ -61,34 +69,56 @@ export function ReaderPage() {
       <main className="reader-main">
         <ReaderView
           section={currentSection}
-          activeParaIdx={activeParaIdx}
+          activeSentIdx={activeSentIdx}
           isPlaying={isPlaying}
         />
       </main>
 
-      <div className="reader-bottom">
-        <TTSControls
-          isPlaying={isPlaying}
-          isPaused={isPaused}
-          paraIdx={paraIdx}
-          totalParas={currentSection.paragraphs.length}
-          onPlay={play}
-          onPause={pause}
-          onResume={resume}
-          onStop={stop}
-          onSkipNext={skipNext}
-          onSkipPrev={skipPrev}
-        />
+      <TTSControls
+        isPlaying={isPlaying}
+        isPaused={isPaused}
+        sentIdx={sentIdx}
+        totalSents={currentSection.sentences.length}
+        onPlay={play}
+        onPause={pause}
+        onResume={resume}
+        onStop={stop}
+        onSkipNext={skipNext}
+        onSkipPrev={skipPrev}
+      />
+
+      <nav className="bottom-nav" aria-label="App navigation">
+        <button
+          className={`bottom-nav-tab ${!tutorOpen ? "bottom-nav-tab-active" : ""}`}
+          onClick={() => setTutorOpen(false)}
+          aria-label="Reader"
+        >
+          <BookOpen size={20} />
+          <span>Reader</span>
+        </button>
 
         <button
-          className={`tutor-fab ${tutorOpen ? "tutor-fab-active" : ""}`}
+          className={`bottom-nav-tab ${tutorOpen ? "bottom-nav-tab-active" : ""}`}
           onClick={() => setTutorOpen(v => !v)}
-          aria-label="Open Trail Guide tutor"
+          aria-label="Trail Guide tutor"
         >
           <MessageSquare size={20} />
           <span>Trail Guide</span>
         </button>
-      </div>
+
+        {oatEngineUrl ? (
+          <a
+            href={oatEngineUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bottom-nav-tab"
+            aria-label="OAT Engine"
+          >
+            <ExternalLink size={20} />
+            <span>OAT Engine</span>
+          </a>
+        ) : null}
+      </nav>
 
       <TutorChat
         isOpen={tutorOpen}

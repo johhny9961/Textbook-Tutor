@@ -49,9 +49,12 @@ export function TutorChat({ isOpen, onClose, currentSection }: TutorChatProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const panelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 300);
+      panelRef.current?.focus();
+      setTimeout(() => inputRef.current?.focus(), 200);
     }
   }, [isOpen]);
 
@@ -193,11 +196,24 @@ When relevant, refer to this specific section. Help the student understand this 
       <button
         className={`tutor-overlay ${isOpen ? "tutor-overlay-visible" : ""}`}
         onClick={onClose}
-        aria-label="Close tutor"
+        aria-label="Close tutor overlay"
         tabIndex={isOpen ? 0 : -1}
         type="button"
       />
-      <div className={`tutor-panel ${isOpen ? "tutor-panel-open" : ""}`} role="dialog" aria-label="Trail Guide tutor" aria-modal={isOpen}>
+      <div
+        className={`tutor-panel ${isOpen ? "tutor-panel-open" : ""}`}
+        aria-hidden={!isOpen}
+        {...(!isOpen ? { inert: true } : {})}
+      >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-label="Trail Guide tutor"
+        aria-modal={true}
+        tabIndex={-1}
+        onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}
+        style={{ display: "flex", flexDirection: "column", height: "100%", outline: "none" }}
+      >
         <div className="tutor-header">
           <div className="tutor-header-info">
             <div className="tutor-avatar">
@@ -262,6 +278,7 @@ When relevant, refer to this specific section. Help the student understand this 
             {isStreaming ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
           </button>
         </div>
+      </div>
       </div>
     </>
   );

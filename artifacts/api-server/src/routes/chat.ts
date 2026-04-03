@@ -15,10 +15,15 @@ chatRouter.post("/chat", async (req, res) => {
       return;
     }
 
+    const origin = req.headers["origin"] || "";
+    const allowedPattern = /\.replit\.dev$|\.repl\.co$|localhost/;
+    if (origin && allowedPattern.test(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+    }
+
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
 
     const stream = anthropic.messages.stream({
       model: "claude-haiku-4-5",

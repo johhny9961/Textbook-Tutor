@@ -1,17 +1,19 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import type { Sentence } from "@/types";
 
 interface UseTTSOptions {
-  paragraphs: string[];
+  sentences: Sentence[];
   speed: number;
-  onParaChange?: (idx: number) => void;
+  onSentenceChange?: (sentIdx: number, paraIdx: number) => void;
   onEnd?: () => void;
 }
 
 interface UseTTSReturn {
   isPlaying: boolean;
   isPaused: boolean;
+  sentIdx: number;
   paraIdx: number;
-  play: (fromIdx?: number) => void;
+  play: (fromSentIdx?: number) => void;
   pause: () => void;
   resume: () => void;
   stop: () => void;
@@ -19,19 +21,20 @@ interface UseTTSReturn {
   skipPrev: () => void;
 }
 
-export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions): UseTTSReturn {
+export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOptions): UseTTSReturn {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [sentIdx, setSentIdx] = useState(0);
   const [paraIdx, setParaIdx] = useState(0);
 
   const synthRef = useRef<SpeechSynthesis | null>(null);
-  const currentIdxRef = useRef(0);
+  const currentSentIdxRef = useRef(0);
   const playingRef = useRef(false);
   const pausedRef = useRef(false);
-  const paragraphsRef = useRef(paragraphs);
+  const sentencesRef = useRef(sentences);
   const speedRef = useRef(speed);
 
-  useEffect(() => { paragraphsRef.current = paragraphs; }, [paragraphs]);
+  useEffect(() => { sentencesRef.current = sentences; }, [sentences]);
   useEffect(() => { speedRef.current = speed; }, [speed]);
 
   useEffect(() => {
@@ -50,15 +53,18 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
       setIsPlaying(false);
       setIsPaused(false);
     }
-  }, [paragraphs]);
+  }, [sentences]);
 
-  const updateIdx = useCallback((idx: number) => {
-    currentIdxRef.current = idx;
-    setParaIdx(idx);
-    onParaChange?.(idx);
-  }, [onParaChange]);
+  const updateSent = useCallback((si: number) => {
+    currentSentIdxRef.current = si;
+    const sent = sentencesRef.current[si];
+    const pi = sent?.paraIdx ?? 0;
+    setSentIdx(si);
+    setParaIdx(pi);
+    onSentenceChange?.(si, pi);
+  }, [onSentenceChange]);
 
-  const speakFromIdx = useCallback((idx: number) => {
+  const speakFromIdx = useCallback((si: number) => {
     const synth = synthRef.current;
     if (!synth) return;
 
@@ -67,10 +73,10 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
     pausedRef.current = false;
     setIsPlaying(true);
     setIsPaused(false);
-    updateIdx(idx);
+    updateSent(si);
 
     const speakNext = (i: number) => {
-      if (!playingRef.current || i >= paragraphsRef.current.length) {
+      if (!playingRef.current || i >= sentencesRef.current.length) {
         playingRef.current = false;
         setIsPlaying(false);
         setIsPaused(false);
@@ -78,8 +84,9 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
         return;
       }
 
-      const text = paragraphsRef.current[i];
-      if (!text?.trim()) {
+      const sent = sentencesRef.current[i];
+      const text = sent?.text?.trim();
+      if (!text) {
         speakNext(i + 1);
         return;
       }
@@ -90,9 +97,12 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
       utt.volume = 1;
 
       utt.onstart = () => {
-        if (playingRef.current) {
-          updateIdx(i);
-        }
+        if (playingRef.current) updateSent(i);
+      };
+
+      utt.onboundary = (_e: SpeechSynthesisEvent) => {
+        // Word boundary: highlight is already at sentence level.
+        // Future: update a word-level overlay for finer-grained guidance.
       };
 
       utt.onend = () => {
@@ -101,7 +111,7 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
         }
       };
 
-      utt.onerror = (e) => {
+      utt.onerror = (e: SpeechSynthesisErrorEvent) => {
         if (e.error !== "interrupted" && e.error !== "canceled") {
           speakNext(i + 1);
         }
@@ -110,12 +120,12 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
       synth.speak(utt);
     };
 
-    speakNext(idx);
-  }, [updateIdx, onEnd]);
+    speakNext(si);
+  }, [updateSent, onEnd]);
 
-  const play = useCallback((fromIdx?: number) => {
-    const idx = fromIdx ?? currentIdxRef.current;
-    speakFromIdx(idx);
+  const play = useCallback((fromSentIdx?: number) => {
+    const si = fromSentIdx ?? currentSentIdxRef.current;
+    speakFromIdx(si);
   }, [speakFromIdx]);
 
   const pause = useCallback(() => {
@@ -129,14 +139,13 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
   const resume = useCallback(() => {
     const synth = synthRef.current;
     if (!synth) return;
-
     if (synth.paused) {
       synth.resume();
       pausedRef.current = false;
       setIsPaused(false);
       setIsPlaying(true);
     } else {
-      speakFromIdx(currentIdxRef.current);
+      speakFromIdx(currentSentIdxRef.current);
     }
   }, [speakFromIdx]);
 
@@ -149,22 +158,22 @@ export function useTTS({ paragraphs, speed, onParaChange, onEnd }: UseTTSOptions
   }, []);
 
   const skipNext = useCallback(() => {
-    const nextIdx = Math.min(currentIdxRef.current + 1, paragraphsRef.current.length - 1);
+    const nextIdx = Math.min(currentSentIdxRef.current + 1, sentencesRef.current.length - 1);
     if (playingRef.current) {
       speakFromIdx(nextIdx);
     } else {
-      updateIdx(nextIdx);
+      updateSent(nextIdx);
     }
-  }, [speakFromIdx, updateIdx]);
+  }, [speakFromIdx, updateSent]);
 
   const skipPrev = useCallback(() => {
-    const prevIdx = Math.max(currentIdxRef.current - 1, 0);
+    const prevIdx = Math.max(currentSentIdxRef.current - 1, 0);
     if (playingRef.current) {
       speakFromIdx(prevIdx);
     } else {
-      updateIdx(prevIdx);
+      updateSent(prevIdx);
     }
-  }, [speakFromIdx, updateIdx]);
+  }, [speakFromIdx, updateSent]);
 
-  return { isPlaying, isPaused, paraIdx, play, pause, resume, stop, skipNext, skipPrev };
+  return { isPlaying, isPaused, sentIdx, paraIdx, play, pause, resume, stop, skipNext, skipPrev };
 }
