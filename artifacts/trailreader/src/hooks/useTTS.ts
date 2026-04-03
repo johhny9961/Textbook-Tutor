@@ -87,7 +87,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
       const sent = sentencesRef.current[i];
       const text = sent?.text?.trim();
       if (!text) {
-        speakNext(i + 1);
+        setTimeout(() => speakNext(i + 1), 0);
         return;
       }
 
