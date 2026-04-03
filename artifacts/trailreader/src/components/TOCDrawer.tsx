@@ -87,7 +87,7 @@ export function TOCDrawer({ isOpen, onClose, book, currentSectionIdx, onSectionS
           {book.chapters.map((chapter) => {
             const isExpanded = expandedChapters.has(chapter.index);
             const hasActiveSec = chapter.sections.some(
-              s => book.sections.indexOf(s) === currentSectionIdx
+              s => book.sections.findIndex(sec => sec.id === s.id) === currentSectionIdx
             );
 
             return (
@@ -108,7 +108,7 @@ export function TOCDrawer({ isOpen, onClose, book, currentSectionIdx, onSectionS
                 {isExpanded && (
                   <ul className="toc-sections">
                     {chapter.sections.map((section) => {
-                      const globalIdx = book.sections.indexOf(section);
+                      const globalIdx = book.sections.findIndex(s => s.id === section.id);
                       const isActive = globalIdx === currentSectionIdx;
                       return (
                         <li key={section.id}>

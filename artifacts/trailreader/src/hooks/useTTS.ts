@@ -47,7 +47,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   }, []);
 
   useEffect(() => {
-    if (isPlaying && !isPaused) {
+    if (playingRef.current && !pausedRef.current) {
       synthRef.current?.cancel();
       playingRef.current = false;
       setIsPlaying(false);
@@ -75,6 +75,8 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
     setIsPaused(false);
     updateSent(si);
 
+    // Defer speak() so Chrome has time to process the cancel() above.
+    // Calling speak() synchronously after cancel() silently drops the utterance in Chrome.
     const speakNext = (i: number) => {
       if (!playingRef.current || i >= sentencesRef.current.length) {
         playingRef.current = false;
@@ -120,7 +122,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
       synth.speak(utt);
     };
 
-    speakNext(si);
+    setTimeout(() => speakNext(si), 0);
   }, [updateSent, onEnd]);
 
   const play = useCallback((fromSentIdx?: number) => {
