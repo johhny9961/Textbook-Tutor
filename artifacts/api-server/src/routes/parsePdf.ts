@@ -312,7 +312,7 @@ pdfRouter.post("/parse-pdf", upload.single("file"), async (req, res) => {
       return;
     }
 
-    if (file.mimetype !== "application/pdf" && !file.originalname.endsWith(".pdf")) {
+    if (file.mimetype !== "application/pdf" && !file.originalname.toLowerCase().endsWith(".pdf")) {
       res.status(400).json({ error: "Only PDF files are accepted." });
       return;
     }
