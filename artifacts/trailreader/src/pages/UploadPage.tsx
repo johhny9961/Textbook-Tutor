@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { Upload, BookOpen, AlertCircle, Loader2, FileText } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Upload, BookOpen, AlertCircle, Loader2, FileText, Link, Library, RefreshCw } from "lucide-react";
 import { parseOpenStaxHTML } from "@/utils/htmlParser";
 import { useApp } from "@/context/AppContext";
 import type { BookData } from "@/types";
@@ -7,13 +7,116 @@ import type { BookData } from "@/types";
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const UPLOAD_TIMEOUT_MS = 120_000;
 
+interface LibraryBook {
+  id: number;
+  slug: string;
+  title: string;
+  coverUrl: string | null;
+  status: "importing" | "ready" | "error";
+  totalSections: number;
+  importedSections: number;
+  errorMessage: string | null;
+}
+
 export function UploadPage() {
   const { setBook } = useApp();
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [libraryBooks, setLibraryBooks] = useState<LibraryBook[]>([]);
+  const [importUrl, setImportUrl] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const htmlInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchLibrary = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/books`);
+      if (res.ok) {
+        const data: LibraryBook[] = await res.json();
+        setLibraryBooks(data);
+        return data;
+      }
+    } catch {}
+    return [];
+  }, []);
+
+  useEffect(() => {
+    fetchLibrary();
+  }, [fetchLibrary]);
+
+  useEffect(() => {
+    const hasImporting = libraryBooks.some((b) => b.status === "importing");
+    if (!hasImporting) return;
+
+    const id = setInterval(() => {
+      fetchLibrary();
+    }, 3000);
+
+    return () => {
+      clearInterval(id);
+    };
+  }, [libraryBooks, fetchLibrary]);
+
+  const loadBookFromLibrary = useCallback(async (slug: string) => {
+    setLoadingSlug(slug);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/books/${slug}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error || "Failed to load book.");
+        return;
+      }
+      const book: BookData = await res.json();
+      if (book.sections.length === 0) {
+        setError("This book has no readable content.");
+        return;
+      }
+      setBook(book);
+    } catch {
+      setError("Could not connect to the server. Please try again.");
+    } finally {
+      setLoadingSlug(null);
+    }
+  }, [setBook]);
+
+  const handleImport = useCallback(async () => {
+    if (!importUrl.trim()) return;
+    setIsImporting(true);
+    setError(null);
+    setImportStatus(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/books/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: importUrl.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Failed to start import.");
+        return;
+      }
+
+      if (data.status === "ready") {
+        setImportStatus("Book is ready! Loading...");
+        loadBookFromLibrary(data.slug);
+      } else {
+        setImportStatus(data.message || "Import started...");
+        setImportUrl("");
+        fetchLibrary();
+      }
+    } catch {
+      setError("Could not connect to the server. Please try again.");
+    } finally {
+      setIsImporting(false);
+    }
+  }, [importUrl, loadBookFromLibrary, fetchLibrary]);
 
   const processPdf = useCallback(async (file: File) => {
     if (file.size > 100 * 1024 * 1024) {
@@ -122,6 +225,9 @@ export function UploadPage() {
 
   const handleDragLeave = () => setIsDragging(false);
 
+  const readyBooks = libraryBooks.filter((b) => b.status === "ready");
+  const importingBooks = libraryBooks.filter((b) => b.status === "importing");
+
   return (
     <div className="upload-page">
       <div className="upload-content">
@@ -132,6 +238,83 @@ export function UploadPage() {
         <p className="upload-subtitle">
           Load your OpenStax textbook and read along with audio and AI tutoring.
         </p>
+
+        <div className="upload-import-section">
+          <h2 className="upload-section-heading">
+            <Link size={16} />
+            Import from OpenStax
+          </h2>
+          <div className="upload-import-row">
+            <input
+              type="text"
+              className="upload-import-input"
+              placeholder="Paste OpenStax book URL or slug..."
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleImport()}
+              disabled={isImporting}
+            />
+            <button
+              type="button"
+              className="upload-import-btn"
+              onClick={handleImport}
+              disabled={isImporting || !importUrl.trim()}
+            >
+              {isImporting ? <Loader2 size={16} className="spin" /> : "Import"}
+            </button>
+          </div>
+          {importStatus && (
+            <p className="upload-import-status">{importStatus}</p>
+          )}
+        </div>
+
+        {(readyBooks.length > 0 || importingBooks.length > 0) && (
+          <div className="upload-library">
+            <h2 className="upload-section-heading">
+              <Library size={16} />
+              Your Library
+            </h2>
+            <div className="upload-library-list">
+              {readyBooks.map((book) => (
+                <button
+                  key={book.id}
+                  type="button"
+                  className="upload-library-item"
+                  onClick={() => loadBookFromLibrary(book.slug)}
+                  disabled={loadingSlug === book.slug}
+                >
+                  <BookOpen size={18} />
+                  <span className="upload-library-title">{book.title}</span>
+                  {loadingSlug === book.slug ? (
+                    <Loader2 size={14} className="spin" />
+                  ) : (
+                    <span className="upload-library-sections">{book.totalSections} sections</span>
+                  )}
+                </button>
+              ))}
+              {importingBooks.map((book) => (
+                <div key={book.id} className="upload-library-item upload-library-importing">
+                  <RefreshCw size={18} className="spin" />
+                  <span className="upload-library-title">{book.title}</span>
+                  <span className="upload-library-progress">
+                    {book.importedSections}/{book.totalSections || "?"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="upload-error" role="alert">
+            <AlertCircle size={16} />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <div className="upload-divider">
+          <span>or upload a file</span>
+        </div>
 
         <div
           className={`upload-dropzone ${isDragging ? "upload-dropzone-active" : ""} ${isProcessing ? "upload-dropzone-loading" : ""}`}
@@ -152,10 +335,9 @@ export function UploadPage() {
             </div>
           ) : (
             <>
-              <Upload size={32} className="upload-icon" />
+              <Upload size={24} className="upload-icon" />
               <p className="upload-drop-text">Drop your textbook PDF here</p>
               <p className="upload-drop-sub">or click to browse</p>
-              <span className="upload-file-type">.pdf</span>
             </>
           )}
         </div>
@@ -187,25 +369,6 @@ export function UploadPage() {
           className="upload-file-input"
           aria-hidden="true"
         />
-
-        {error && (
-          <div className="upload-error" role="alert">
-            <AlertCircle size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <div className="upload-instructions">
-          <h2>How to get your textbook</h2>
-          <ol>
-            <li>Go to <strong>openstax.org</strong> and open your textbook</li>
-            <li>Click <strong>"Get this book"</strong> and download the <strong>PDF</strong></li>
-            <li>Upload the <code>.pdf</code> file here</li>
-          </ol>
-          <p className="upload-privacy-note">
-            Your PDF is sent to our server for text extraction, then discarded immediately. Nothing is stored.
-          </p>
-        </div>
       </div>
     </div>
   );

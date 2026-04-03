@@ -62,9 +62,19 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - **Routes**:
   - `POST /api/chat` — Claude claude-haiku-4-5 SSE streaming with Trail Guide system prompt
   - `POST /api/parse-pdf` — Server-side PDF text extraction via pdfjs-dist (legacy build); multipart upload with multer; returns `BookData` JSON with section-local sentence indices
+  - `GET /api/books` — List all books in the library (id, slug, title, status, progress)
+  - `POST /api/books/import` — Import an OpenStax book by URL or slug; validates against CMS API; background fetch of all sections
+  - `GET /api/books/:slug` — Full book data (chapters + sections with instrumented HTML, paragraphs, sentences) for ready books
+  - `GET /api/books/:slug/status` — Import progress (totalSections, importedSections, status)
 - **Trail Guide persona**: Socratic, ADHD-aware, 5-phase learning approach for OAT prep
 - **Dependencies**: pdfjs-dist (externalized in esbuild), multer for file uploads
+- **OpenStax fetcher** (`src/lib/openstaxFetcher.ts`): Extracts TOC from `window.__PRELOADED_STATE__`, fetches each section page, parses `data-book-content="true"` div, instruments paragraphs/sentences, stores in PostgreSQL. 500ms rate limiting between fetches. Clears stale data on retry. Marks book as error if >50% sections fail.
 - **Error handling**: Centralized middleware catches MulterError (file size, type) → JSON responses
+
+### Database (`lib/db`)
+- **Schema tables**: `books`, `book_chapters`, `book_sections` — persistent OpenStax book library
+- **ORM**: Drizzle with `pg` Pool
+- **Unique constraints**: `(bookId, index)` on chapters, `(bookId, sectionId)` on sections
 
 ### Mockup Sandbox (`artifacts/mockup-sandbox`)
 - **Purpose**: Vite dev server for isolated component preview on the canvas board
