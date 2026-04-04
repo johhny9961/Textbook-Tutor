@@ -17,7 +17,7 @@ function escapeHtml(text: string): string {
 
 function tokenizeSentences(text: string): string[] {
   if (!text.trim()) return [];
-  const parts = text.trim().split(/(?<=[.!?])\s+(?=[A-Z"'])/);
+  const parts = text.trim().split(/(?<=(?<!\b(?:Dr|Mr|Mrs|Ms|Prof|Sr|Jr|St|vs|Vol|Fig|eq|Eq|al|etc))[.!?])\s+(?=[A-Z"'])/);
   return parts.map(s => s.trim()).filter(s => s.length > 0);
 }
 

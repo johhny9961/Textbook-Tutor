@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { books, bookChapters, bookSections } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { instrumentParagraphs } from "./textUtils";
 
 interface TOCEntry {
   title: string;
@@ -9,66 +10,8 @@ interface TOCEntry {
   contents?: TOCEntry[];
 }
 
-interface Sentence {
-  text: string;
-  paraIdx: number;
-  sentIdx: number;
-}
-
 function stripHtmlTags(html: string): string {
   return html.replace(/<[^>]*>/g, "").trim();
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function tokenizeSentences(text: string): string[] {
-  if (!text.trim()) return [];
-  const parts = text.trim().split(/(?<=[.!?])\s+(?=[A-Z"'])/);
-  return parts.map((s) => s.trim()).filter((s) => s.length > 0);
-}
-
-function instrumentParagraphs(
-  paragraphTexts: string[]
-): { htmlContent: string; paragraphs: string[]; sentences: Sentence[] } {
-  const paragraphs: string[] = [];
-  const sentences: Sentence[] = [];
-  let paraIdx = 0;
-  let sentIdx = 0;
-  const htmlParts: string[] = [];
-
-  for (const text of paragraphTexts) {
-    if (text.length <= 20) continue;
-    const currentParaIdx = paraIdx++;
-    paragraphs.push(text);
-
-    const sentTexts = tokenizeSentences(text);
-
-    if (sentTexts.length > 1) {
-      const spans = sentTexts.map((s) => {
-        const idx = sentIdx++;
-        sentences.push({ text: s, paraIdx: currentParaIdx, sentIdx: idx });
-        return `<span data-sent-idx="${idx}">${escapeHtml(s)}</span>`;
-      });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}">${spans.join(" ")}</p>`);
-    } else {
-      const idx = sentIdx++;
-      sentences.push({ text, paraIdx: currentParaIdx, sentIdx: idx });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}"><span data-sent-idx="${idx}">${escapeHtml(text)}</span></p>`);
-    }
-  }
-
-  return {
-    htmlContent: htmlParts.join("\n"),
-    paragraphs,
-    sentences,
-  };
 }
 
 function extractParagraphsFromHtml(html: string): string[] {
@@ -203,31 +146,34 @@ function flattenTOC(tree: TOCEntry[]): FlatTOCEntry[] {
   const entries: FlatTOCEntry[] = [];
   let chapterIndex = 0;
 
+  function collectLeaves(
+    item: TOCEntry,
+    chIdx: number,
+    chTitle: string,
+    secIdx: { val: number },
+  ) {
+    if (!item.contents || item.contents.length === 0) {
+      entries.push({
+        chapterIndex: chIdx,
+        chapterTitle: chTitle,
+        sectionIndex: secIdx.val++,
+        sectionTitle: stripHtmlTags(item.title),
+        slug: item.slug,
+      });
+    } else {
+      for (const child of item.contents) {
+        collectLeaves(child, chIdx, chTitle, secIdx);
+      }
+    }
+  }
+
   for (const item of tree) {
     const chTitle = stripHtmlTags(item.title);
 
     if (item.contents && item.contents.length > 0) {
-      let sectionIndex = 0;
-      for (const section of item.contents) {
-        if (section.contents && section.contents.length > 0) {
-          for (const subsec of section.contents) {
-            entries.push({
-              chapterIndex,
-              chapterTitle: chTitle,
-              sectionIndex: sectionIndex++,
-              sectionTitle: stripHtmlTags(subsec.title),
-              slug: subsec.slug,
-            });
-          }
-        } else {
-          entries.push({
-            chapterIndex,
-            chapterTitle: chTitle,
-            sectionIndex: sectionIndex++,
-            sectionTitle: stripHtmlTags(section.title),
-            slug: section.slug,
-          });
-        }
+      const secIdx = { val: 0 };
+      for (const child of item.contents) {
+        collectLeaves(child, chapterIndex, chTitle, secIdx);
       }
       chapterIndex++;
     } else {
@@ -289,8 +235,11 @@ export async function importOpenStaxBook(bookSlug: string, bookId: number): Prom
 
     log.info({ totalSections: flatEntries.length }, "TOC parsed, starting section imports");
 
-    await db.delete(bookSections).where(eq(bookSections.bookId, bookId));
-    await db.delete(bookChapters).where(eq(bookChapters.bookId, bookId));
+    // Delete old data atomically so a partial delete can't leave corrupt state
+    await db.transaction(async (tx) => {
+      await tx.delete(bookSections).where(eq(bookSections.bookId, bookId));
+      await tx.delete(bookChapters).where(eq(bookChapters.bookId, bookId));
+    });
 
     const chapterMap = new Map<number, number>();
     let successfulSections = 0;

@@ -129,7 +129,7 @@ When relevant, refer to this specific section. Help the student understand this 
               setMessages(prev => {
                 const updated = [...prev];
                 const last = updated[updated.length - 1];
-                if (last.role === "assistant") {
+                if (last && last.role === "assistant") {
                   updated[updated.length - 1] = {
                     ...last,
                     content: last.content + parsed.content,
@@ -146,7 +146,7 @@ When relevant, refer to this specific section. Help the student understand this 
       setMessages(prev => {
         const updated = [...prev];
         const last = updated[updated.length - 1];
-        if (last.role === "assistant" && last.content === "") {
+        if (last && last.role === "assistant" && last.content === "") {
           updated[updated.length - 1] = {
             ...last,
             content: "Sorry, I couldn't connect right now. Check your connection and try again.",

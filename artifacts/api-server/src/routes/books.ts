@@ -55,7 +55,9 @@ booksRouter.post("/books/import", async (req, res) => {
       }
       if (existing.status === "error") {
         await db.update(books).set({ status: "importing", errorMessage: null, importedSections: 0, updatedAt: new Date() }).where(eq(books.id, existing.id));
-        importOpenStaxBook(slug, existing.id).catch(() => {});
+        importOpenStaxBook(slug, existing.id).catch((err) => {
+          req.log?.error({ err, slug }, "Background book import failed");
+        });
         res.json({ id: existing.id, slug: existing.slug, status: "importing", message: "Retrying import." });
         return;
       }
@@ -90,7 +92,9 @@ booksRouter.post("/books/import", async (req, res) => {
       })
       .returning();
 
-    importOpenStaxBook(slug, newBook.id).catch(() => {});
+    importOpenStaxBook(slug, newBook.id).catch((err) => {
+      req.log?.error({ err, slug }, "Background book import failed");
+    });
 
     res.status(202).json({
       id: newBook.id,

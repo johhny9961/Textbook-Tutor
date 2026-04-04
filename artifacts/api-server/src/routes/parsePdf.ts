@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { TextItem } from "pdfjs-dist/types/src/display/api.js";
+import { instrumentParagraphs, type Sentence } from "../lib/textUtils";
 
 const pdfRouter = Router();
 
@@ -9,12 +10,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 },
 });
-
-interface Sentence {
-  text: string;
-  paraIdx: number;
-  sentIdx: number;
-}
 
 interface BookSection {
   id: string;
@@ -45,21 +40,6 @@ interface TextBlock {
   page: number;
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function tokenizeSentences(text: string): string[] {
-  if (!text.trim()) return [];
-  const parts = text.trim().split(/(?<=[.!?])\s+(?=[A-Z"'])/);
-  return parts.map((s) => s.trim()).filter((s) => s.length > 0);
-}
-
 function isChapterHeading(text: string): boolean {
   return /^(chapter|unit)\s+\d+/i.test(text.trim());
 }
@@ -88,50 +68,53 @@ async function extractTextBlocks(pdfData: Uint8Array): Promise<TextBlock[]> {
 
   const blocks: TextBlock[] = [];
 
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    const page = await doc.getPage(pageNum);
-    const content = await page.getTextContent();
+  try {
+    for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+      const page = await doc.getPage(pageNum);
+      const content = await page.getTextContent();
 
-    let currentLine = "";
-    let currentFontSize = 0;
-    let lastY: number | null = null;
+      let currentLine = "";
+      let currentFontSize = 0;
+      let lastY: number | null = null;
 
-    for (const item of content.items) {
-      const textItem = item as TextItem;
-      if (!textItem.str) continue;
+      for (const item of content.items) {
+        const textItem = item as TextItem;
+        if (!textItem.str) continue;
 
-      const fontSize = Math.abs(textItem.transform[3]);
-      const y = textItem.transform[5];
+        const fontSize = Math.abs(textItem.transform[3]);
+        const y = textItem.transform[5];
 
-      const isNewLine = lastY !== null && Math.abs(y - lastY) > fontSize * 0.5;
+        const isNewLine = lastY !== null && Math.abs(y - lastY) > fontSize * 0.5;
 
-      if (isNewLine && currentLine.trim()) {
+        if (isNewLine && currentLine.trim()) {
+          blocks.push({
+            text: currentLine.trim().replace(/\s+/g, " "),
+            fontSize: currentFontSize,
+            page: pageNum,
+          });
+          currentLine = "";
+          currentFontSize = 0;
+        }
+
+        currentLine += textItem.str;
+        if (fontSize > currentFontSize) currentFontSize = fontSize;
+        lastY = y;
+      }
+
+      if (currentLine.trim()) {
         blocks.push({
           text: currentLine.trim().replace(/\s+/g, " "),
           fontSize: currentFontSize,
           page: pageNum,
         });
-        currentLine = "";
-        currentFontSize = 0;
       }
 
-      currentLine += textItem.str;
-      if (fontSize > currentFontSize) currentFontSize = fontSize;
-      lastY = y;
+      page.cleanup();
     }
-
-    if (currentLine.trim()) {
-      blocks.push({
-        text: currentLine.trim().replace(/\s+/g, " "),
-        fontSize: currentFontSize,
-        page: pageNum,
-      });
-    }
-
-    page.cleanup();
+  } finally {
+    doc.destroy();
   }
 
-  doc.destroy();
   return blocks;
 }
 
@@ -152,43 +135,6 @@ function findBodyFontSize(blocks: TextBlock[]): number {
     }
   }
   return bodySize;
-}
-
-function instrumentParagraphs(
-  paragraphTexts: string[]
-): { htmlContent: string; paragraphs: string[]; sentences: Sentence[] } {
-  const paragraphs: string[] = [];
-  const sentences: Sentence[] = [];
-  let paraIdx = 0;
-  let sentIdx = 0;
-  const htmlParts: string[] = [];
-
-  for (const text of paragraphTexts) {
-    if (text.length <= 20) continue;
-    const currentParaIdx = paraIdx++;
-    paragraphs.push(text);
-
-    const sentTexts = tokenizeSentences(text);
-
-    if (sentTexts.length > 1) {
-      const spans = sentTexts.map((s) => {
-        const idx = sentIdx++;
-        sentences.push({ text: s, paraIdx: currentParaIdx, sentIdx: idx });
-        return `<span data-sent-idx="${idx}">${escapeHtml(s)}</span>`;
-      });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}">${spans.join(" ")}</p>`);
-    } else {
-      const idx = sentIdx++;
-      sentences.push({ text, paraIdx: currentParaIdx, sentIdx: idx });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}"><span data-sent-idx="${idx}">${escapeHtml(text)}</span></p>`);
-    }
-  }
-
-  return {
-    htmlContent: htmlParts.join("\n"),
-    paragraphs,
-    sentences,
-  };
 }
 
 function buildBookData(blocks: TextBlock[], fileName: string): BookData {

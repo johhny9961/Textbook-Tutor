@@ -84,12 +84,22 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
         return;
       }
 
-      const sent = sentencesRef.current[i];
-      const text = sent?.text?.trim();
-      if (!text) {
-        setTimeout(() => speakNext(i + 1), 0);
+      // Skip empty sentences, but cap consecutive skips to avoid stack overflow
+      let idx = i;
+      const maxSkip = Math.min(idx + 50, sentencesRef.current.length);
+      while (idx < maxSkip && !sentencesRef.current[idx]?.text?.trim()) {
+        idx++;
+      }
+      if (idx >= sentencesRef.current.length || !sentencesRef.current[idx]?.text?.trim()) {
+        playingRef.current = false;
+        setIsPlaying(false);
+        setIsPaused(false);
+        onEnd?.();
         return;
       }
+
+      const sent = sentencesRef.current[idx];
+      const text = sent.text.trim();
 
       const utt = new SpeechSynthesisUtterance(text);
       utt.rate = speedRef.current;
@@ -97,7 +107,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
       utt.volume = 1;
 
       utt.onstart = () => {
-        if (playingRef.current) updateSent(i);
+        if (playingRef.current) updateSent(idx);
       };
 
       utt.onboundary = (_e: SpeechSynthesisEvent) => {
@@ -107,13 +117,13 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
 
       utt.onend = () => {
         if (playingRef.current && !pausedRef.current) {
-          speakNext(i + 1);
+          speakNext(idx + 1);
         }
       };
 
       utt.onerror = (e: SpeechSynthesisErrorEvent) => {
         if (e.error !== "interrupted" && e.error !== "canceled") {
-          speakNext(i + 1);
+          speakNext(idx + 1);
         }
       };
 
@@ -158,6 +168,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   }, []);
 
   const skipNext = useCallback(() => {
+    if (sentencesRef.current.length === 0) return;
     const nextIdx = Math.min(currentSentIdxRef.current + 1, sentencesRef.current.length - 1);
     if (playingRef.current) {
       speakFromIdx(nextIdx);
@@ -167,6 +178,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   }, [speakFromIdx, updateSent]);
 
   const skipPrev = useCallback(() => {
+    if (sentencesRef.current.length === 0) return;
     const prevIdx = Math.max(currentSentIdxRef.current - 1, 0);
     if (playingRef.current) {
       speakFromIdx(prevIdx);
