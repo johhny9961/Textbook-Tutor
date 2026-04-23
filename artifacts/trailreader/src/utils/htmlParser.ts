@@ -36,7 +36,7 @@ function instrumentHTML(el: Element): InstrumentResult {
   function walk(node: Element) {
     if (BLOCK_TAGS.has(node.tagName)) {
       const text = (node.textContent?.trim() || "").replace(/\s+/g, " ");
-      if (text.length <= 20) return;
+      if (text.length <= 10) return;
 
       const currentParaIdx = paraIdx++;
       node.setAttribute("data-para-idx", String(currentParaIdx));
@@ -96,7 +96,7 @@ export function parseOpenStaxHTML(rawHtml: string, fileName: string): BookData {
   if (sections.length === 0) {
     const container = doc.createElement("div");
     const allText = doc.body?.textContent?.trim() || "";
-    const rawParas = allText.split(/\n\n+/).filter(t => t.trim().length > 20).slice(0, 500);
+    const rawParas = allText.split(/\n\n+/).filter(t => t.trim().length > 10).slice(0, 500);
     rawParas.forEach((t, i) => {
       const p = doc.createElement("p");
       p.textContent = t.trim();
@@ -255,7 +255,7 @@ function parseFlatContent(
   function extractTexts(node: Element) {
     if (BLOCK_TAGS.has(node.tagName)) {
       const text = (node.textContent?.trim() || "").replace(/\s+/g, " ");
-      if (text.length > 20) allTexts.push(text);
+      if (text.length > 10) allTexts.push(text);
     } else {
       for (const child of Array.from(node.children)) {
         extractTexts(child as Element);

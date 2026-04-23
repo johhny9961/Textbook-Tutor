@@ -138,7 +138,9 @@ When relevant, refer to this specific section. Help the student understand this 
                 return updated;
               });
             }
-          } catch {}
+          } catch (parseErr) {
+            console.warn("Failed to parse SSE chunk:", data, parseErr);
+          }
         }
       }
     } catch (err: unknown) {

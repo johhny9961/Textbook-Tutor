@@ -15,7 +15,9 @@ function loadLS<T>(key: string, fallback: T): T {
 function saveLS<T>(key: string, value: T) {
   try {
     localStorage.setItem(NS + key, JSON.stringify(value));
-  } catch {}
+  } catch (e) {
+    console.warn("Failed to save to localStorage:", key, e);
+  }
 }
 
 interface AppContextValue {

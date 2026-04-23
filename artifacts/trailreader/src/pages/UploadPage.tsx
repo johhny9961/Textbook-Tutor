@@ -28,6 +28,7 @@ export function UploadPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  const [pollFailures, setPollFailures] = useState(0);
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const htmlInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,9 +38,12 @@ export function UploadPage() {
       if (res.ok) {
         const data: LibraryBook[] = await res.json();
         setLibraryBooks(data);
+        setPollFailures(0);
         return data;
       }
-    } catch {}
+    } catch {
+      setPollFailures(prev => prev + 1);
+    }
     return [];
   }, []);
 
@@ -49,7 +53,7 @@ export function UploadPage() {
 
   useEffect(() => {
     const hasImporting = libraryBooks.some((b) => b.status === "importing");
-    if (!hasImporting) return;
+    if (!hasImporting || pollFailures >= 5) return;
 
     const id = setInterval(() => {
       fetchLibrary();
@@ -58,7 +62,7 @@ export function UploadPage() {
     return () => {
       clearInterval(id);
     };
-  }, [libraryBooks, fetchLibrary]);
+  }, [libraryBooks, fetchLibrary, pollFailures]);
 
   const loadBookFromLibrary = useCallback(async (slug: string) => {
     setLoadingSlug(slug);

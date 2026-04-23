@@ -44,7 +44,7 @@ function instrumentParagraphs(
   const htmlParts: string[] = [];
 
   for (const text of paragraphTexts) {
-    if (text.length <= 20) continue;
+    if (text.length <= 10) continue;
     const currentParaIdx = paraIdx++;
     paragraphs.push(text);
 
@@ -85,7 +85,7 @@ function extractParagraphsFromHtml(html: string): string[] {
       .replace(/&nbsp;/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    if (text.length > 20) {
+    if (text.length > 10) {
       paragraphs.push(text);
     }
   }

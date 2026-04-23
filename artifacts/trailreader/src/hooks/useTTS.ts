@@ -141,7 +141,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   const resume = useCallback(() => {
     const synth = synthRef.current;
     if (!synth) return;
-    if (synth.paused) {
+    if (pausedRef.current) {
       synth.resume();
       pausedRef.current = false;
       setIsPaused(false);
