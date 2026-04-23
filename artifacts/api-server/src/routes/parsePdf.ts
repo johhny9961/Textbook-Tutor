@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { TextItem } from "pdfjs-dist/types/src/display/api.js";
+import { instrumentParagraphs, type BookData, type BookSection, type BookChapter } from "../lib/textProcessing";
 
 const pdfRouter = Router();
 
@@ -10,54 +11,10 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024 },
 });
 
-interface Sentence {
-  text: string;
-  paraIdx: number;
-  sentIdx: number;
-}
-
-interface BookSection {
-  id: string;
-  chapterIndex: number;
-  chapterTitle: string;
-  sectionIndex: number;
-  title: string;
-  htmlContent: string;
-  paragraphs: string[];
-  sentences: Sentence[];
-}
-
-interface BookChapter {
-  index: number;
-  title: string;
-  sections: BookSection[];
-}
-
-interface BookData {
-  name: string;
-  chapters: BookChapter[];
-  sections: BookSection[];
-}
-
 interface TextBlock {
   text: string;
   fontSize: number;
   page: number;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function tokenizeSentences(text: string): string[] {
-  if (!text.trim()) return [];
-  const parts = text.trim().split(/(?<=[.!?])\s+(?=[A-Z"'])/);
-  return parts.map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
 function isChapterHeading(text: string): boolean {
@@ -152,43 +109,6 @@ function findBodyFontSize(blocks: TextBlock[]): number {
     }
   }
   return bodySize;
-}
-
-function instrumentParagraphs(
-  paragraphTexts: string[]
-): { htmlContent: string; paragraphs: string[]; sentences: Sentence[] } {
-  const paragraphs: string[] = [];
-  const sentences: Sentence[] = [];
-  let paraIdx = 0;
-  let sentIdx = 0;
-  const htmlParts: string[] = [];
-
-  for (const text of paragraphTexts) {
-    if (text.length <= 20) continue;
-    const currentParaIdx = paraIdx++;
-    paragraphs.push(text);
-
-    const sentTexts = tokenizeSentences(text);
-
-    if (sentTexts.length > 1) {
-      const spans = sentTexts.map((s) => {
-        const idx = sentIdx++;
-        sentences.push({ text: s, paraIdx: currentParaIdx, sentIdx: idx });
-        return `<span data-sent-idx="${idx}">${escapeHtml(s)}</span>`;
-      });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}">${spans.join(" ")}</p>`);
-    } else {
-      const idx = sentIdx++;
-      sentences.push({ text, paraIdx: currentParaIdx, sentIdx: idx });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}"><span data-sent-idx="${idx}">${escapeHtml(text)}</span></p>`);
-    }
-  }
-
-  return {
-    htmlContent: htmlParts.join("\n"),
-    paragraphs,
-    sentences,
-  };
 }
 
 function buildBookData(blocks: TextBlock[], fileName: string): BookData {

@@ -1405,6 +1405,32 @@
   gap: 8px;
 }
 
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.5rem;
+  background: rgba(234, 179, 8, 0.1);
+  color: #eab308;
+  font-size: 0.8125rem;
+  margin-bottom: 0.75rem;
+}
+
+.upload-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary, #a1a1aa);
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+
+.upload-checkbox-row input[type="checkbox"] {
+  accent-color: #6366f1;
+}
+
 .upload-import-input {
   flex: 1;
   min-width: 0;

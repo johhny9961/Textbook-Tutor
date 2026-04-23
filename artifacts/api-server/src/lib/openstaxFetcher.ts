@@ -1,114 +1,18 @@
 import { db } from "@workspace/db";
 import { books, bookChapters, bookSections } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import {
+  stripHtmlTags,
+  instrumentParagraphs,
+  extractParagraphsFromHtml,
+  fetchWithRetry,
+} from "./textProcessing";
 
 interface TOCEntry {
   title: string;
   slug: string;
   contents?: TOCEntry[];
-}
-
-interface Sentence {
-  text: string;
-  paraIdx: number;
-  sentIdx: number;
-}
-
-function stripHtmlTags(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function tokenizeSentences(text: string): string[] {
-  if (!text.trim()) return [];
-  const parts = text.trim().split(/(?<=[.!?])\s+(?=[A-Z"'])/);
-  return parts.map((s) => s.trim()).filter((s) => s.length > 0);
-}
-
-function instrumentParagraphs(
-  paragraphTexts: string[]
-): { htmlContent: string; paragraphs: string[]; sentences: Sentence[] } {
-  const paragraphs: string[] = [];
-  const sentences: Sentence[] = [];
-  let paraIdx = 0;
-  let sentIdx = 0;
-  const htmlParts: string[] = [];
-
-  for (const text of paragraphTexts) {
-    if (text.length <= 20) continue;
-    const currentParaIdx = paraIdx++;
-    paragraphs.push(text);
-
-    const sentTexts = tokenizeSentences(text);
-
-    if (sentTexts.length > 1) {
-      const spans = sentTexts.map((s) => {
-        const idx = sentIdx++;
-        sentences.push({ text: s, paraIdx: currentParaIdx, sentIdx: idx });
-        return `<span data-sent-idx="${idx}">${escapeHtml(s)}</span>`;
-      });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}">${spans.join(" ")}</p>`);
-    } else {
-      const idx = sentIdx++;
-      sentences.push({ text, paraIdx: currentParaIdx, sentIdx: idx });
-      htmlParts.push(`<p data-para-idx="${currentParaIdx}"><span data-sent-idx="${idx}">${escapeHtml(text)}</span></p>`);
-    }
-  }
-
-  return {
-    htmlContent: htmlParts.join("\n"),
-    paragraphs,
-    sentences,
-  };
-}
-
-function extractParagraphsFromHtml(html: string): string[] {
-  const paragraphs: string[] = [];
-  const pRegex = /<p[^>]*>([\s\S]*?)<\/p>/gi;
-  let match;
-  while ((match = pRegex.exec(html)) !== null) {
-    const text = stripHtmlTags(match[1])
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (text.length > 20) {
-      paragraphs.push(text);
-    }
-  }
-  return paragraphs;
-}
-
-async function fetchWithRetry(url: string, retries = 3): Promise<string> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "TrailReader/1.0 (educational textbook reader)" },
-        signal: AbortSignal.timeout(30000),
-      });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} for ${url}`);
-      }
-      return await res.text();
-    } catch (err) {
-      if (i === retries - 1) throw err;
-      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
-    }
-  }
-  throw new Error("Should not reach here");
 }
 
 function extractPreloadedState(html: string): Record<string, unknown> | null {

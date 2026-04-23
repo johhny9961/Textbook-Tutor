@@ -44,13 +44,15 @@ export function ReaderView({ section, activeSentIdx, isPlaying }: ReaderViewProp
 
   useEffect(() => {
     if (prevSectionIdRef.current !== section.id) {
+      prevSectionIdRef.current = section.id;
       const container = containerRef.current;
       if (container) {
-        const saved = localStorage.getItem(SCROLL_STORAGE_KEY(section.id));
-        const top = saved ? parseInt(saved, 10) : 0;
-        container.scrollTo({ top, behavior: "instant" });
+        requestAnimationFrame(() => {
+          const saved = localStorage.getItem(SCROLL_STORAGE_KEY(section.id));
+          const top = saved ? parseInt(saved, 10) : 0;
+          container.scrollTo({ top, behavior: "instant" });
+        });
       }
-      prevSectionIdRef.current = section.id;
     }
   }, [section.id]);
 

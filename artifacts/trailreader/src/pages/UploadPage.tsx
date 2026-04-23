@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Upload, BookOpen, AlertCircle, Loader2, FileText, Link, Library, RefreshCw } from "lucide-react";
+import { Upload, BookOpen, AlertCircle, Loader2, FileText, Link, Library, RefreshCw, Globe } from "lucide-react";
 import { parseOpenStaxHTML } from "@/utils/htmlParser";
 import { useApp } from "@/context/AppContext";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import type { BookData } from "@/types";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -19,7 +21,8 @@ interface LibraryBook {
 }
 
 export function UploadPage() {
-  const { setBook } = useApp();
+  const { book, setBook } = useApp();
+  const isOnline = useOnlineStatus();
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -28,6 +31,11 @@ export function UploadPage() {
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  const [pollFailures, setPollFailures] = useState(0);
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [isScraping, setIsScraping] = useState(false);
+  const [followLinks, setFollowLinks] = useState(false);
+  const [linkSelector, setLinkSelector] = useState("");
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const htmlInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,9 +45,12 @@ export function UploadPage() {
       if (res.ok) {
         const data: LibraryBook[] = await res.json();
         setLibraryBooks(data);
+        setPollFailures(0);
         return data;
       }
-    } catch {}
+    } catch {
+      setPollFailures(prev => prev + 1);
+    }
     return [];
   }, []);
 
@@ -49,7 +60,7 @@ export function UploadPage() {
 
   useEffect(() => {
     const hasImporting = libraryBooks.some((b) => b.status === "importing");
-    if (!hasImporting) return;
+    if (!hasImporting || pollFailures >= 5) return;
 
     const id = setInterval(() => {
       fetchLibrary();
@@ -58,7 +69,7 @@ export function UploadPage() {
     return () => {
       clearInterval(id);
     };
-  }, [libraryBooks, fetchLibrary]);
+  }, [libraryBooks, fetchLibrary, pollFailures]);
 
   const loadBookFromLibrary = useCallback(async (slug: string) => {
     setLoadingSlug(slug);
@@ -117,6 +128,50 @@ export function UploadPage() {
       setIsImporting(false);
     }
   }, [importUrl, loadBookFromLibrary, fetchLibrary]);
+
+  const handleScrape = useCallback(async () => {
+    if (!scrapeUrl.trim()) return;
+    setIsScraping(true);
+    setError(null);
+
+    try {
+      const endpoint = followLinks ? `${API_BASE}/api/scrape/multi` : `${API_BASE}/api/scrape`;
+      const body: Record<string, unknown> = { url: scrapeUrl.trim() };
+      if (followLinks && linkSelector.trim()) {
+        body.linkSelector = linkSelector.trim();
+      }
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120_000),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Failed to scrape page.");
+        return;
+      }
+
+      const book = data as BookData;
+      if (book.sections.length === 0) {
+        setError("No readable content found on this page.");
+        return;
+      }
+
+      setBook(book);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Scraping timed out. The site may be too slow or blocking requests.");
+      } else {
+        setError("Could not connect to the server. Please try again.");
+      }
+    } finally {
+      setIsScraping(false);
+    }
+  }, [scrapeUrl, followLinks, linkSelector, setBook]);
 
   const processPdf = useCallback(async (file: File) => {
     if (file.size > 100 * 1024 * 1024) {
@@ -239,6 +294,23 @@ export function UploadPage() {
           Load your OpenStax textbook and read along with audio and AI tutoring.
         </p>
 
+        {!isOnline && (
+          <>
+            <OfflineBanner message="You're offline. Import and upload features require an internet connection." />
+            {book && (
+              <button
+                type="button"
+                className="upload-import-btn"
+                onClick={() => { /* navigate to reader by setting book again */ }}
+                style={{ width: "100%", marginBottom: "1rem" }}
+              >
+                <BookOpen size={16} />
+                Continue Reading
+              </button>
+            )}
+          </>
+        )}
+
         <div className="upload-import-section">
           <h2 className="upload-section-heading">
             <Link size={16} />
@@ -265,6 +337,52 @@ export function UploadPage() {
           </div>
           {importStatus && (
             <p className="upload-import-status">{importStatus}</p>
+          )}
+        </div>
+
+        <div className="upload-import-section">
+          <h2 className="upload-section-heading">
+            <Globe size={16} />
+            Import from any website
+          </h2>
+          <div className="upload-import-row">
+            <input
+              type="text"
+              className="upload-import-input"
+              placeholder="Paste any URL..."
+              value={scrapeUrl}
+              onChange={(e) => setScrapeUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleScrape()}
+              disabled={isScraping}
+            />
+            <button
+              type="button"
+              className="upload-import-btn"
+              onClick={handleScrape}
+              disabled={isScraping || !scrapeUrl.trim()}
+            >
+              {isScraping ? <Loader2 size={16} className="spin" /> : "Scrape"}
+            </button>
+          </div>
+          <label className="upload-checkbox-row">
+            <input
+              type="checkbox"
+              checked={followLinks}
+              onChange={(e) => setFollowLinks(e.target.checked)}
+              disabled={isScraping}
+            />
+            <span>Follow links on this page</span>
+          </label>
+          {followLinks && (
+            <input
+              type="text"
+              className="upload-import-input"
+              placeholder="Link selector (optional, e.g. nav a, .sidebar a)"
+              value={linkSelector}
+              onChange={(e) => setLinkSelector(e.target.value)}
+              disabled={isScraping}
+              style={{ marginTop: "0.5rem" }}
+            />
           )}
         </div>
 

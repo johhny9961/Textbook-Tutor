@@ -6,7 +6,12 @@ const NS = "trailreader:";
 function loadLS<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(NS + key);
-    return raw !== null ? (JSON.parse(raw) as T) : fallback;
+    if (raw === null) return fallback;
+    const parsed = JSON.parse(raw);
+    if (key === "book" && parsed !== null) {
+      if (!parsed || !Array.isArray(parsed.sections)) return fallback;
+    }
+    return parsed as T;
   } catch {
     return fallback;
   }
@@ -15,7 +20,9 @@ function loadLS<T>(key: string, fallback: T): T {
 function saveLS<T>(key: string, value: T) {
   try {
     localStorage.setItem(NS + key, JSON.stringify(value));
-  } catch {}
+  } catch (e) {
+    console.warn("Failed to save to localStorage:", key, e);
+  }
 }
 
 interface AppContextValue {

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { X, Send, Bot, RotateCcw, Loader2, ChevronDown } from "lucide-react";
 import type { ChatMessage, BookSection } from "@/types";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OfflineBanner } from "@/components/OfflineBanner";
 
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -29,6 +31,7 @@ interface TutorChatProps {
 }
 
 export function TutorChat({ isOpen, onClose, currentSection }: TutorChatProps) {
+  const isOnline = useOnlineStatus();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -44,6 +47,19 @@ export function TutorChat({ isOpen, onClose, currentSection }: TutorChatProps) {
       }]);
     }
   }, [isOpen]);
+
+  const prevSectionIdRef = useRef(currentSection?.id);
+  useEffect(() => {
+    if (currentSection?.id && prevSectionIdRef.current && currentSection.id !== prevSectionIdRef.current) {
+      abortRef.current?.abort();
+      setIsStreaming(false);
+      setMessages([{
+        role: "assistant",
+        content: `Now reading: **${currentSection.title}**. What questions do you have about this section?`,
+      }]);
+    }
+    prevSectionIdRef.current = currentSection?.id;
+  }, [currentSection?.id, currentSection?.title]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -138,7 +154,9 @@ When relevant, refer to this specific section. Help the student understand this 
                 return updated;
               });
             }
-          } catch {}
+          } catch (parseErr) {
+            console.warn("Failed to parse SSE chunk:", data, parseErr);
+          }
         }
       }
     } catch (err: unknown) {
@@ -178,6 +196,12 @@ When relevant, refer to this specific section. Help the student understand this 
     }]);
     setIsStreaming(false);
   };
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -236,6 +260,10 @@ When relevant, refer to this specific section. Help the student understand this 
           </div>
         </div>
 
+        {!isOnline && (
+          <OfflineBanner message="You're offline. AI tutoring requires an internet connection." />
+        )}
+
         <div className="tutor-messages">
           {messages.map((msg, i) => (
             <div key={i} className={`tutor-msg tutor-msg-${msg.role}`}>
@@ -267,12 +295,12 @@ When relevant, refer to this specific section. Help the student understand this 
             onKeyDown={handleKeyDown}
             placeholder="Ask Trail Guide anything…"
             rows={1}
-            disabled={isStreaming}
+            disabled={isStreaming || !isOnline}
           />
           <button
             className="tutor-send-btn"
             onClick={sendMessage}
-            disabled={!input.trim() || isStreaming}
+            disabled={!input.trim() || isStreaming || !isOnline}
             aria-label="Send message"
           >
             {isStreaming ? <Loader2 size={18} className="spin" /> : <Send size={18} />}
