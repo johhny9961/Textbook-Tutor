@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Upload, BookOpen, AlertCircle, Loader2, FileText, Link, Library, RefreshCw, Globe } from "lucide-react";
 import { parseOpenStaxHTML } from "@/utils/htmlParser";
 import { useApp } from "@/context/AppContext";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import type { BookData } from "@/types";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -19,7 +21,8 @@ interface LibraryBook {
 }
 
 export function UploadPage() {
-  const { setBook } = useApp();
+  const { book, setBook } = useApp();
+  const isOnline = useOnlineStatus();
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -290,6 +293,23 @@ export function UploadPage() {
         <p className="upload-subtitle">
           Load your OpenStax textbook and read along with audio and AI tutoring.
         </p>
+
+        {!isOnline && (
+          <>
+            <OfflineBanner message="You're offline. Import and upload features require an internet connection." />
+            {book && (
+              <button
+                type="button"
+                className="upload-import-btn"
+                onClick={() => { /* navigate to reader by setting book again */ }}
+                style={{ width: "100%", marginBottom: "1rem" }}
+              >
+                <BookOpen size={16} />
+                Continue Reading
+              </button>
+            )}
+          </>
+        )}
 
         <div className="upload-import-section">
           <h2 className="upload-section-heading">
