@@ -179,6 +179,12 @@ When relevant, refer to this specific section. Help the student understand this 
     setIsStreaming(false);
   };
 
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 

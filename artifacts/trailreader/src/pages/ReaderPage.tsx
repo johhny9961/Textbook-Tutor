@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { BookOpen, MessageSquare, ExternalLink } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { Header } from "@/components/Header";
@@ -18,6 +18,9 @@ export function ReaderPage() {
   const currentSection = book?.sections[sectionIdx] ?? null;
   const totalSections = book?.sections.length ?? 0;
 
+  const sectionIdxRef = useRef(sectionIdx);
+  sectionIdxRef.current = sectionIdx;
+
   const { isPlaying, isPaused, sentIdx, play, pause, resume, stop, skipNext, skipPrev } = useTTS({
     sentences: currentSection?.sentences ?? [],
     speed,
@@ -27,11 +30,9 @@ export function ReaderPage() {
     },
     onEnd: () => {
       if (!book) return;
-      const next = sectionIdx + 1;
+      const next = sectionIdxRef.current + 1;
       if (next < book.sections.length) {
         setSectionIdx(next);
-        setActiveSentIdx(0);
-        setActiveParaIdx(0);
       }
     },
   });

@@ -47,12 +47,14 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   }, []);
 
   useEffect(() => {
-    if (isPlaying && !isPaused) {
-      synthRef.current?.cancel();
-      playingRef.current = false;
-      setIsPlaying(false);
-      setIsPaused(false);
-    }
+    playingRef.current = false;
+    pausedRef.current = false;
+    synthRef.current?.cancel();
+    setIsPlaying(false);
+    setIsPaused(false);
+    currentSentIdxRef.current = 0;
+    setSentIdx(0);
+    setParaIdx(0);
   }, [sentences]);
 
   const updateSent = useCallback((si: number) => {
@@ -66,7 +68,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
 
   const speakFromIdx = useCallback((si: number) => {
     const synth = synthRef.current;
-    if (!synth) return;
+    if (!synth || sentencesRef.current.length === 0) return;
 
     synth.cancel();
     playingRef.current = true;
@@ -158,6 +160,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   }, []);
 
   const skipNext = useCallback(() => {
+    if (sentencesRef.current.length === 0) return;
     const nextIdx = Math.min(currentSentIdxRef.current + 1, sentencesRef.current.length - 1);
     if (playingRef.current) {
       speakFromIdx(nextIdx);
@@ -167,6 +170,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
   }, [speakFromIdx, updateSent]);
 
   const skipPrev = useCallback(() => {
+    if (sentencesRef.current.length === 0) return;
     const prevIdx = Math.max(currentSentIdxRef.current - 1, 0);
     if (playingRef.current) {
       speakFromIdx(prevIdx);
