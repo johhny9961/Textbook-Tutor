@@ -42,7 +42,7 @@ export function TTSControls({
             className="tts-btn"
             onClick={onSkipPrev}
             aria-label="Previous sentence"
-            disabled={sentIdx === 0}
+            disabled={totalSents === 0 || sentIdx === 0}
           >
             <SkipBack size={18} />
           </button>
@@ -65,7 +65,7 @@ export function TTSControls({
             className="tts-btn"
             onClick={onSkipNext}
             aria-label="Next sentence"
-            disabled={sentIdx >= totalSents - 1}
+            disabled={totalSents === 0 || sentIdx >= totalSents - 1}
           >
             <SkipForward size={18} />
           </button>

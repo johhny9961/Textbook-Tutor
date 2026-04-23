@@ -99,12 +99,7 @@ export function useTTS({ sentences, speed, onSentenceChange, onEnd }: UseTTSOpti
       utt.volume = 1;
 
       utt.onstart = () => {
-        if (playingRef.current) updateSent(i);
-      };
-
-      utt.onboundary = (_e: SpeechSynthesisEvent) => {
-        // Word boundary: highlight is already at sentence level.
-        // Future: update a word-level overlay for finer-grained guidance.
+        if (playingRef.current && i !== currentSentIdxRef.current) updateSent(i);
       };
 
       utt.onend = () => {

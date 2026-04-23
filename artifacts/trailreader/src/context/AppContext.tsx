@@ -6,7 +6,12 @@ const NS = "trailreader:";
 function loadLS<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(NS + key);
-    return raw !== null ? (JSON.parse(raw) as T) : fallback;
+    if (raw === null) return fallback;
+    const parsed = JSON.parse(raw);
+    if (key === "book" && parsed !== null) {
+      if (!parsed || !Array.isArray(parsed.sections)) return fallback;
+    }
+    return parsed as T;
   } catch {
     return fallback;
   }

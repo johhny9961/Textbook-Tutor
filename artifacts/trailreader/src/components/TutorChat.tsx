@@ -45,6 +45,19 @@ export function TutorChat({ isOpen, onClose, currentSection }: TutorChatProps) {
     }
   }, [isOpen]);
 
+  const prevSectionIdRef = useRef(currentSection?.id);
+  useEffect(() => {
+    if (currentSection?.id && prevSectionIdRef.current && currentSection.id !== prevSectionIdRef.current) {
+      abortRef.current?.abort();
+      setIsStreaming(false);
+      setMessages([{
+        role: "assistant",
+        content: `Now reading: **${currentSection.title}**. What questions do you have about this section?`,
+      }]);
+    }
+    prevSectionIdRef.current = currentSection?.id;
+  }, [currentSection?.id, currentSection?.title]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);

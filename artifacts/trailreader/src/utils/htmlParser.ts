@@ -33,7 +33,8 @@ function instrumentHTML(el: Element): InstrumentResult {
   const paragraphs: string[] = [];
   const sentences: Sentence[] = [];
 
-  function walk(node: Element) {
+  function walk(node: Element, depth = 0) {
+    if (depth > 100) return;
     if (BLOCK_TAGS.has(node.tagName)) {
       const text = (node.textContent?.trim() || "").replace(/\s+/g, " ");
       if (text.length <= 10) return;
@@ -59,7 +60,7 @@ function instrumentHTML(el: Element): InstrumentResult {
       }
     } else {
       for (const child of Array.from(node.children)) {
-        walk(child as Element);
+        walk(child as Element, depth + 1);
       }
     }
   }
@@ -96,10 +97,14 @@ export function parseOpenStaxHTML(rawHtml: string, fileName: string): BookData {
   if (sections.length === 0) {
     const container = doc.createElement("div");
     const allText = doc.body?.textContent?.trim() || "";
-    const rawParas = allText.split(/\n\n+/).filter(t => t.trim().length > 10).slice(0, 500);
-    rawParas.forEach((t, i) => {
+    const rawParas = allText
+      .split(/[\n\r]+/)
+      .map(t => t.trim())
+      .filter(t => t.length > 10)
+      .slice(0, 500);
+    rawParas.forEach((t) => {
       const p = doc.createElement("p");
-      p.textContent = t.trim();
+      p.textContent = t;
       container.appendChild(p);
     });
     const { htmlContent, paragraphs, sentences } = instrumentHTML(container);
@@ -252,13 +257,14 @@ function parseFlatContent(
   const chapterSections: BookSection[] = [];
 
   const allTexts: string[] = [];
-  function extractTexts(node: Element) {
+  function extractTexts(node: Element, depth = 0) {
+    if (depth > 100) return;
     if (BLOCK_TAGS.has(node.tagName)) {
       const text = (node.textContent?.trim() || "").replace(/\s+/g, " ");
       if (text.length > 10) allTexts.push(text);
     } else {
       for (const child of Array.from(node.children)) {
-        extractTexts(child as Element);
+        extractTexts(child as Element, depth + 1);
       }
     }
   }
