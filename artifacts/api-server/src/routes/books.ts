@@ -1,25 +1,38 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { books, bookChapters, bookSections } from "@workspace/db";
-import { eq, asc, sql } from "drizzle-orm";
+import { eq, asc, count } from "drizzle-orm";
 import { parseBookSlug, importOpenStaxBook } from "../lib/openstaxFetcher";
 
 const booksRouter = Router();
 
 booksRouter.get("/books", async (req, res) => {
   try {
-    const rows = await db.execute(sql`
-      SELECT b.id, b.slug, b.title, b.cover_url as "coverUrl",
-             b.status, b.total_sections as "totalSections",
-             b.imported_sections as "importedSections",
-             b.error_message as "errorMessage",
-             b.created_at as "createdAt",
-             (SELECT count(*)::int FROM book_chapters c WHERE c.book_id = b.id) as "chapterCount"
-      FROM books b
-      ORDER BY b.title ASC
-    `);
+    const allBooks = await db.select().from(books).orderBy(asc(books.title));
 
-    res.json(rows.rows);
+    const result = await Promise.all(
+      allBooks.map(async (b) => {
+        const [chapCount] = await db
+          .select({ count: count() })
+          .from(bookChapters)
+          .where(eq(bookChapters.bookId, b.id));
+
+        return {
+          id: b.id,
+          slug: b.slug,
+          title: b.title,
+          coverUrl: b.coverUrl,
+          status: b.status,
+          totalSections: b.totalSections,
+          importedSections: b.importedSections,
+          errorMessage: b.errorMessage,
+          createdAt: b.createdAt,
+          chapterCount: chapCount?.count ?? 0,
+        };
+      })
+    );
+
+    res.json(result);
   } catch (err) {
     req.log?.error({ err }, "Failed to list books");
     res.status(500).json({ error: "Failed to fetch book list." });
@@ -80,7 +93,7 @@ booksRouter.post("/books/import", async (req, res) => {
       matchedCoverUrl = match.cover_url;
     }
 
-    const [newBook] = await db
+    const inserted = await db
       .insert(books)
       .values({
         slug,
@@ -89,6 +102,8 @@ booksRouter.post("/books/import", async (req, res) => {
         status: "importing",
       })
       .returning();
+
+    const newBook = inserted[0];
 
     importOpenStaxBook(slug, newBook.id).catch(() => {});
 

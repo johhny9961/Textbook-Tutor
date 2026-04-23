@@ -1,9 +1,9 @@
-import { pgTable, serial, text, integer, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const books = pgTable("books", {
-  id: serial("id").primaryKey(),
+export const books = sqliteTable("books", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   coverUrl: text("cover_url"),
@@ -11,12 +11,12 @@ export const books = pgTable("books", {
   totalSections: integer("total_sections").notNull().default(0),
   importedSections: integer("imported_sections").notNull().default(0),
   errorMessage: text("error_message"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().$defaultFn(() => new Date()),
 });
 
-export const bookChapters = pgTable("book_chapters", {
-  id: serial("id").primaryKey(),
+export const bookChapters = sqliteTable("book_chapters", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   bookId: integer("book_id").notNull().references(() => books.id, { onDelete: "cascade" }),
   index: integer("index").notNull(),
   title: text("title").notNull(),
@@ -24,8 +24,8 @@ export const bookChapters = pgTable("book_chapters", {
   uniqueIndex("book_chapters_book_index").on(table.bookId, table.index),
 ]);
 
-export const bookSections = pgTable("book_sections", {
-  id: serial("id").primaryKey(),
+export const bookSections = sqliteTable("book_sections", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
   bookId: integer("book_id").notNull().references(() => books.id, { onDelete: "cascade" }),
   chapterId: integer("chapter_id").notNull().references(() => bookChapters.id, { onDelete: "cascade" }),
   chapterIndex: integer("chapter_index").notNull(),
@@ -34,8 +34,8 @@ export const bookSections = pgTable("book_sections", {
   title: text("title").notNull(),
   chapterTitle: text("chapter_title").notNull(),
   htmlContent: text("html_content").notNull(),
-  paragraphs: jsonb("paragraphs").notNull().$type<string[]>(),
-  sentences: jsonb("sentences").notNull().$type<{ text: string; paraIdx: number; sentIdx: number }[]>(),
+  paragraphs: text("paragraphs", { mode: "json" }).notNull().$type<string[]>(),
+  sentences: text("sentences", { mode: "json" }).notNull().$type<{ text: string; paraIdx: number; sentIdx: number }[]>(),
 }, (table) => [
   uniqueIndex("book_sections_book_section").on(table.bookId, table.sectionId),
 ]);
