@@ -34,6 +34,7 @@ async function buildAll() {
       "sqlite3",
       "canvas",
       "pdfjs-dist",
+      "jsdom",
       "bcrypt",
       "argon2",
       "fsevents",
