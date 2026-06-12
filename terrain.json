@@ -1,0 +1,20 @@
+{
+  "semester": {
+    "name": "Summer 2026",
+    "start": "2026-05-13",
+    "end": "2026-08-06"
+  },
+  "anchors": [
+    { "date": "2026-06-30", "label": "Trig Exam 2", "class": "MATH 1060" },
+    { "date": "2026-07-05", "label": "MC Ch16-17 wall", "class": "CHEM 1220" }
+  ],
+  "gates": [
+    {
+      "week_of": "2026-06-08",
+      "class": "MATH 1060",
+      "concept": "Fundamental identities",
+      "todoist_match": "identities",
+      "weight": 2
+    }
+  ]
+}
