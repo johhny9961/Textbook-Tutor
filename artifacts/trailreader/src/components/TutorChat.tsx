@@ -4,24 +4,6 @@ import type { ChatMessage, BookSection } from "@/types";
 
 const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const TRAIL_GUIDE_PROMPT = `You are Trail Guide, an AI tutor for OAT (Optometry Admission Test) students. You specialize in helping neurodivergent learners (ADHD, autism) study effectively.
-
-Your approach follows a 5-phase method:
-1. **Anchor** - Connect new concept to something familiar the student already knows
-2. **Pattern** - Point out the underlying rule or structure
-3. **Example** - Show a concrete, specific example
-4. **Apply** - Prompt the student to try or predict something
-5. **Connect** - Link to related OAT topics or prior knowledge
-
-Rules:
-- Ask ONE question at a time — never stack questions
-- Keep responses SHORT (3-5 sentences max unless explaining a complex concept)
-- Be Socratic: guide with questions, don't just give answers
-- Use encouraging but realistic language — no hollow praise
-- If a student seems stuck, offer a hint, not the answer
-- Flag concepts that appear on OAT chemistry/biology/physics
-- Use simple language; avoid jargon unless explaining the jargon itself`;
-
 interface TutorChatProps {
   isOpen: boolean;
   onClose: () => void;
@@ -58,21 +40,14 @@ export function TutorChat({ isOpen, onClose, currentSection }: TutorChatProps) {
     }
   }, [isOpen]);
 
-  const buildSystemPrompt = useCallback(() => {
-    if (!currentSection) return TRAIL_GUIDE_PROMPT;
-    const context = currentSection.paragraphs.slice(0, 20).join("\n").slice(0, 2000);
-    return `${TRAIL_GUIDE_PROMPT}
-
----
-CURRENT READING CONTEXT:
-Chapter: ${currentSection.chapterTitle}
+  const buildContext = useCallback(() => {
+    if (!currentSection) return "";
+    const excerpt = currentSection.paragraphs.slice(0, 20).join("\n").slice(0, 2000);
+    return `Chapter: ${currentSection.chapterTitle}
 Section: ${currentSection.title}
 
 Content excerpt:
-${context}
----
-
-When relevant, refer to this specific section. Help the student understand this material in depth.`;
+${excerpt}`;
   }, [currentSection]);
 
   const sendMessage = useCallback(async () => {
@@ -96,7 +71,7 @@ When relevant, refer to this specific section. Help the student understand this 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: newMessages,
-          systemPrompt: buildSystemPrompt(),
+          context: buildContext(),
         }),
         signal: abortRef.current.signal,
       });
@@ -157,7 +132,7 @@ When relevant, refer to this specific section. Help the student understand this 
     } finally {
       setIsStreaming(false);
     }
-  }, [input, messages, isStreaming, buildSystemPrompt]);
+  }, [input, messages, isStreaming, buildContext]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
